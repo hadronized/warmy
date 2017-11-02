@@ -1,0 +1,386 @@
+//! Hot-reloading, loadable and reloadable resources.
+//!
+//! A resource is a (possibly) disk-cached object that can be hot-reloaded while you use it.
+//! Resources can be serialized and deserialized as you see fit. The concept of *caching* and
+//! *loading* are split in different code locations so that you can easily compose both – provide
+//! the loading code and ask the resource system to cache it for you.
+//!
+//! This flexibility is exposed in the public interface so that the cache can be augmented with
+//! user-provided objects. You might be interested in implementing `Load` and `CacheKey` – from
+//! the [any-cache](https://crates.io/crates/any-cache) crate.
+//!
+//! In order to have hot-reloading working, you have to call the `Store::sync` function that will
+//! perform disk syncing. This function will unqueue disk events.
+//!
+//! > Note: this is not the queue used by the underlying library (depending on your platform; for
+//! > instance, inotify). This queue cannot, in theory, overflow. It’ll get bigger and bigger if you
+//! > never sync.
+//!
+//! # Key wrapping
+//!
+//! If you use the resource system, your resources will be cached and accessible by their keys. The
+//! key type is not enforced. Resource’s keys are typed to enable namespacing: if you have two
+//! resources which ID is `34`, because the key types are different, you can safely cache the
+//! resource with the ID `34` without any clashing or undefined behaviors. More in the any-cache
+//! crate.
+//!
+//! # Borrowing
+//!
+//! Because the resource you access might change at anytime, you have to ensure you are the single
+//! one handling them around. This is done via the `Rc::borrow` and `Rc::borrow_mut` functions.
+//!
+//! > Important note: keep in mind `Rc` is not `Send`. This is a limitation that might be fixed in
+//! > the near future.
+
+extern crate any_cache;
+extern crate notify;
+
+use any_cache::{Cache, HashCache};
+pub use any_cache::CacheKey;
+use notify::{Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher, raw_watcher};
+use notify::op::WRITE;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt;
+use std::hash;
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::sync::mpsc::{Receiver, channel};
+use std::time::{Duration, Instant};
+
+/// Loadable object from disk.
+///
+/// An object can be loaded from disk if, given a path, it can output a `LoadResult<_>`. It’s
+/// important to note that you’re not supposed to use that trait directly. Instead, you should use
+/// the `Store`’s functions.
+pub trait Load: 'static + Sized {
+  /// Type of error that might happen while loading.
+  type Error;
+
+  /// Load a resource from the file system. The `Store` can be used to load or declare additional
+  /// resource dependencies. The result type is used to register for dependency events.
+  fn from_fs<P>(path: P, cache: &mut Store) -> Result<LoadResult<Self>, Self::Error> where P: AsRef<Path>;
+}
+
+/// Result of a resource loading. This type enables you to register a resource for reloading events
+/// of others (dependencies). If you don’t need to run specific code on a dependency reloading, use
+/// the `.into()` function to lift your return value to `LoadResult<_>` or use the provided
+/// function.
+pub struct LoadResult<T> {
+  /// The loaded object.
+  pub res: T,
+  /// The list of dependencies to listen for events.
+  pub deps: Vec<PathBuf>
+}
+
+impl<T> LoadResult<T> {
+  /// Return a resource declaring no dependency at all.
+  pub fn without_dep(res: T) -> Self {
+    LoadResult { res, deps: Vec::new() }
+  }
+
+  /// Return a resource along with its dependencies.
+  pub fn with_deps(res: T, deps: Vec<PathBuf>) -> Self {
+    LoadResult { res, deps }
+  }
+}
+
+impl<T> From<T> for LoadResult<T> {
+  fn from(res: T) -> Self {
+    LoadResult::without_dep(res)
+  }
+}
+
+/// Resources are wrapped in this type.
+pub type Res<T> = Rc<RefCell<T>>;
+
+pub struct Key<T> {
+  path: PathBuf,
+  _t: PhantomData<*const T>
+}
+
+impl<T> Clone for Key<T> {
+  fn clone(&self) -> Self {
+    Key {
+      path: self.path.clone(),
+      _t: PhantomData
+    }
+  }
+}
+
+impl<T> fmt::Debug for Key<T> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    self.path.fmt(f)
+  }
+}
+
+impl<T> Eq for Key<T> {}
+
+impl<T> hash::Hash for Key<T> {
+  fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
+    self.path.hash(state)
+  }
+}
+
+impl<T> PartialEq for Key<T> {
+  fn eq(&self, rhs: &Self) -> bool {
+    self.path.eq(&rhs.path)
+  }
+}
+
+impl<T> Key<T> {
+  pub fn new<P>(path: P) -> Self where P: AsRef<Path> {
+    Key {
+      path: path.as_ref().to_owned(),
+      _t: PhantomData
+    }
+  }
+}
+
+impl<T> CacheKey for Key<T> where T: 'static {
+  type Target = Res<T>;
+}
+
+/// Resource store. Responsible for holding and presenting resources.
+pub struct Store {
+  // store options
+  opt: StoreOpt,
+  // resource cache, containing all living resources
+  cache: HashCache,
+  // contains all metadata on resources (reload functions, last time updated, etc.)
+  metadata: HashMap<PathBuf, ResMetaData>,
+  // dependencies, mapping a dependency to its dependent resources
+  deps: HashMap<PathBuf, PathBuf>,
+  // keep the watcher around so that we don’t have it disconnected
+  #[allow(dead_code)]
+  watcher: RecommendedWatcher,
+  // watcher receiver part of the channel
+  watcher_rx: Receiver<RawEvent>,
+}
+
+impl Store {
+  /// Create a new store. The `root` represents the root directory from all the resources come from
+  /// and is relative to the binary’s location by default (unless you specify it as absolute).
+  pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
+    let root = opt.root().to_owned();
+
+    // canonicalize the root because some platforms won’t correctly report file changes otherwise
+    let canon_root = root.canonicalize().map_err(|_| StoreError::RootDoesDotExit(root))?;
+
+    // create the mpsc channel to communicate with the file watcher
+    let (wsx, wrx) = channel();
+    let mut watcher = raw_watcher(wsx).unwrap();
+
+    // spawn a new thread in which we look for events
+    let _ = watcher.watch(&canon_root, RecursiveMode::Recursive);
+
+    Ok(Store {
+      opt,
+      cache: HashCache::new(),
+      metadata: HashMap::new(),
+      deps: HashMap::new(),
+      watcher,
+      watcher_rx: wrx,
+    })
+  }
+
+  /// Inject a new resource in the cache.
+  fn inject<T>(
+    &mut self,
+    key: Key<T>,
+    resource: T,
+    deps: Vec<PathBuf>
+  ) -> Res<T>
+    where T: Load {
+    // wrap the resource to make it shared mutably
+    let res = Rc::new(RefCell::new(resource));
+    let res_ = res.clone();
+
+    // create the path associated with the given key
+    let key_ = key.clone();
+    let path = self.opt.root().join(key.path.clone());
+
+    // closure used to reload the object when needed
+    let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), ()>> = Box::new(move |cache| {
+      match T::from_fs(&key_.path, cache) {
+        Ok(load_result) => {
+          // replace the current resource with the freshly loaded one
+          *res_.borrow_mut() = load_result.res;
+          Ok(())
+        },
+        Err(_) => {
+          // TODO: what shall we do?
+          Err(())
+        }
+      }
+    });
+
+    let metadata = ResMetaData {
+      on_reload: on_reload,
+      last_update_instant: Instant::now(),
+    };
+
+
+    // cache the resource and its meta data
+    self.cache.save(key, res.clone());
+    self.metadata.insert(path.clone(), metadata);
+
+    // register the resource as an observer of its dependencies in the dependencies graph
+    for dep_key in deps {
+      self.deps.insert(dep_key, path.clone());
+    }
+
+    res
+  }
+
+  /// Get a resource from the cache and return an error if loading failed.
+  pub fn get<T>(&mut self, key: &Key<T>) -> Result<Res<T>, T::Error> where T: Load {
+    match self.cache.get(key).cloned() {
+      Some(resource) => {
+        Ok(resource)
+      },
+      None => {
+        // specific loading
+        let load_result = T::from_fs(&key.path, self)?;
+        Ok(self.inject(key.clone(), load_result.res, load_result.deps))
+      }
+    }
+  }
+
+  /// Get a resource from the store for the given key. If it fails, a proxied version is used, which
+  /// will get replaced by the resource once it’s available and reloaded.
+  pub fn get_proxied<T, P>(
+    &mut self,
+    key: &Key<T>,
+    proxy: P
+  ) -> Res<T>
+    where T: Load,
+          P: FnOnce() -> T {
+    match self.get(key) {
+      Ok(resource) => resource,
+      Err(_) => {
+        // FIXME: we set the dependencies to none here, which is silly; find a better design
+        self.inject(key.clone(), proxy(), Vec::new())
+      }
+    }
+  }
+
+  /// Synchronize the cache by updating the resources that ought to.
+  pub fn sync(&mut self) {
+    let update_await_time_ms = self.opt.update_await_time_ms();
+
+    let paths = dequeue_file_changes(&mut self.watcher_rx);
+
+    for path in paths {
+      // find the path in our watched paths; if we find it, we remove it prior to doing anything else
+      if let Some(mut metadata) = self.metadata.remove(&path) {
+        let now = Instant::now();
+
+        // perform a timed check so that we don’t reload several times in a row the same goddamn
+        // resource
+        if now.duration_since(metadata.last_update_instant) >= Duration::from_millis(update_await_time_ms) {
+          if (metadata.on_reload)(self).is_ok() {
+            // if we have successfully reloaded the resource, notify the observers that this
+            // dependency has changed
+            for dep in self.deps.get(path.as_path()).cloned() {
+              if let Some(obs_metadata) = self.metadata.remove(dep.as_path()) {
+                match (obs_metadata.on_reload)(self) {
+                  Ok(_) => { self.metadata.insert(dep, obs_metadata); }
+                  _ => ()
+                }
+              }
+            }
+          }
+        }
+
+        metadata.last_update_instant = now;
+        self.metadata.insert(path.clone(), metadata);
+      }
+    }
+  }
+}
+
+/// Various options to customize a `Store`.
+pub struct StoreOpt {
+  root: PathBuf,
+  update_await_time_ms: u64
+}
+
+impl Default for StoreOpt {
+  fn default() -> Self {
+    StoreOpt {
+      root: PathBuf::from("."),
+      update_await_time_ms: 1000
+    }
+  }
+}
+
+impl StoreOpt {
+  /// Change the update await time (milliseconds) used to determine whether a resource should be
+  /// reloaded or not.
+  ///
+  /// # Default
+  ///
+  /// Defaults to `1000`.
+  #[inline]
+  pub fn set_update_await_time_ms(self, ms: u64) -> Self {
+    StoreOpt {
+      update_await_time_ms: ms,
+      .. self
+    }
+  }
+
+  /// Get the update await time (milliseconds).
+  #[inline]
+  pub fn update_await_time_ms(&self) -> u64 {
+    self.update_await_time_ms
+  }
+
+  /// Change the root directory from which the `Store` will be watching file changes.
+  ///
+  /// # Default
+  ///
+  /// Defaults to `"."`.
+  #[inline]
+  pub fn set_root<P>(self, root: P) -> Self where P: AsRef<Path> {
+    StoreOpt {
+      root: root.as_ref().to_owned(),
+      .. self
+    }
+  }
+
+  /// Get root directory.
+  #[inline]
+  pub fn root(&self) -> &Path {
+    &self.root
+  }
+}
+
+/// Meta data about a resource.
+struct ResMetaData {
+  /// Function to call each time the resource must be reloaded.
+  on_reload: Box<Fn(&mut Store) -> Result<(), ()>>,
+  /// The last time the resource was updated.
+  last_update_instant: Instant,
+}
+
+/// Error that might happen when creating a resource cache.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StoreError {
+  /// The root path for the resources was not found.
+  RootDoesDotExit(PathBuf)
+}
+
+// TODO: profile and see how not to allocate anything
+/// Dequeue any file changes from a watcher channel and output them in a buffer.
+fn dequeue_file_changes(rx: &mut Receiver<RawEvent>) -> Vec<PathBuf> {
+  rx.try_iter().filter_map(|event| {
+    match event {
+      RawEvent { path: Some(ref path), op: Ok(op), .. } if op | WRITE != Op::empty() => {
+        Some(path.clone())
+      },
+      _ => None
+    }
+  }).collect()
+}

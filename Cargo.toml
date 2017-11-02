@@ -1,0 +1,19 @@
+[package]
+name = "warmy"
+version = "0.1.0"
+license = "BSD-3-Clause"
+authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
+description = "Hot-reloading loadable and reloadable resources"
+keywords = ["hot-reloading", "resources"]
+
+homepage = "https://github.com/phaazon/warmy"
+repository = "https://github.com/phaazon/warmy"
+documentation = "https://docs.rs/warmy"
+readme = "README.md"
+
+[dependencies]
+any-cache = "0.2"
+notify = "4.0"
+
+[dev-dependencies]
+tempdir = "0.3"

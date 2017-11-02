@@ -1,0 +1,16 @@
+language: rust
+
+rust:
+  - stable
+  - beta
+  - nightly
+
+os:
+  - linux
+  - osx
+
+script:
+  - rustc --version
+  - cargo --version
+  - cargo build --verbose
+  - cargo test --verbose
