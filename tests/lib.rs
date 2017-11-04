@@ -3,7 +3,7 @@ extern crate warmy;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use warmy::{Key, Load, LoadResult, Store};
+use warmy::{Key, Load, Loaded, Store};
 
 mod utils;
 
@@ -20,11 +20,12 @@ fn foo() {
   impl Load for Foo {
     type Error = ();
 
-    fn from_fs<P>(path: P, _: &mut Store) -> Result<LoadResult<Self>, ()> where P: AsRef<Path> {
+    fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, ()> where P: AsRef<Path> {
       let mut s = String::new();
 
       {
-        let mut fh = File::open(path.as_ref()).unwrap();
+        let path = store.root().join(path.as_ref());
+        let mut fh = File::open(path).unwrap();
         let _ = fh.read_to_string(&mut s);
       }
 
@@ -38,14 +39,15 @@ fn foo() {
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
 
-    let path = root_dir.join("foo");
+    let key: Key<Foo> = Key::new("foo");
+    let path = root_dir.join(key.as_path());
 
     {
       let mut fh = File::create(&path).unwrap();
       let _ = fh.write_all(expected1.as_bytes());
     }
 
-    let r = store.get(&Key::<Foo>::new(&path)).expect("object should be present at the given key");
+    let r = store.get(&key).expect("object should be present at the given key");
 
     assert_eq!(r.borrow().0, expected1);
 

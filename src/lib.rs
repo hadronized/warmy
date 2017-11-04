@@ -51,7 +51,7 @@ use std::time::{Duration, Instant};
 
 /// Loadable object from disk.
 ///
-/// An object can be loaded from disk if, given a path, it can output a `LoadResult<_>`. It’s
+/// An object can be loaded from disk if, given a path, it can output a `Loaded<_>`. It’s
 /// important to note that you’re not supposed to use that trait directly. Instead, you should use
 /// the `Store`’s functions.
 pub trait Load: 'static + Sized {
@@ -60,44 +60,69 @@ pub trait Load: 'static + Sized {
 
   /// Load a resource from the file system. The `Store` can be used to load or declare additional
   /// resource dependencies. The result type is used to register for dependency events.
-  fn from_fs<P>(path: P, cache: &mut Store) -> Result<LoadResult<Self>, Self::Error> where P: AsRef<Path>;
+  fn from_fs<P>(path: P, cache: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path>;
 }
 
 /// Result of a resource loading. This type enables you to register a resource for reloading events
 /// of others (dependencies). If you don’t need to run specific code on a dependency reloading, use
-/// the `.into()` function to lift your return value to `LoadResult<_>` or use the provided
+/// the `.into()` function to lift your return value to `Loaded<_>` or use the provided
 /// function.
-pub struct LoadResult<T> {
+pub struct Loaded<T> {
   /// The loaded object.
   pub res: T,
   /// The list of dependencies to listen for events.
   pub deps: Vec<PathBuf>
 }
 
-impl<T> LoadResult<T> {
+impl<T> Loaded<T> {
   /// Return a resource declaring no dependency at all.
   pub fn without_dep(res: T) -> Self {
-    LoadResult { res, deps: Vec::new() }
+    Loaded { res, deps: Vec::new() }
   }
 
   /// Return a resource along with its dependencies.
   pub fn with_deps(res: T, deps: Vec<PathBuf>) -> Self {
-    LoadResult { res, deps }
+    Loaded { res, deps }
   }
 }
 
-impl<T> From<T> for LoadResult<T> {
+impl<T> From<T> for Loaded<T> {
   fn from(res: T) -> Self {
-    LoadResult::without_dep(res)
+    Loaded::without_dep(res)
   }
 }
 
 /// Resources are wrapped in this type.
 pub type Res<T> = Rc<RefCell<T>>;
 
+/// Key used to get resource.
+///
+/// This is the entry point of the `Store`. A key is a simple path with phantom typing, giving type
+/// hints on the target resource.
+///
+/// > Note: because of being a key, you must not provide an absolute nor canonicalized path:
+/// > instead, you pass local paths without any leading characters (drop any `./` for instance).
+/// >
+/// > `let the_key = Key::new("maps/deck_16/room_3.bsp");`
 pub struct Key<T> {
   path: PathBuf,
   _t: PhantomData<*const T>
+}
+
+impl<T> Key<T> {
+  /// Create a new key from a local path, without leading special characters.
+  pub fn new<P>(path: P) -> Self where P: AsRef<Path> {
+    Key {
+      path: path.as_ref().to_owned(),
+      _t: PhantomData
+    }
+  }
+
+  /// Get the underlying path. This path is relative to the root path of the store the key is used
+  /// in.
+  pub fn as_path(&self) -> &Path {
+    &self.path
+  }
 }
 
 impl<T> Clone for Key<T> {
@@ -129,15 +154,6 @@ impl<T> PartialEq for Key<T> {
   }
 }
 
-impl<T> Key<T> {
-  pub fn new<P>(path: P) -> Self where P: AsRef<Path> {
-    Key {
-      path: path.as_ref().to_owned(),
-      _t: PhantomData
-    }
-  }
-}
-
 impl<T> CacheKey for Key<T> where T: 'static {
   type Target = Res<T>;
 }
@@ -146,6 +162,8 @@ impl<T> CacheKey for Key<T> where T: 'static {
 pub struct Store {
   // store options
   opt: StoreOpt,
+  // canonicalized root path
+  canon_root: PathBuf,
   // resource cache, containing all living resources
   cache: HashCache,
   // contains all metadata on resources (reload functions, last time updated, etc.)
@@ -177,12 +195,18 @@ impl Store {
 
     Ok(Store {
       opt,
+      canon_root,
       cache: HashCache::new(),
       metadata: HashMap::new(),
       deps: HashMap::new(),
       watcher,
       watcher_rx: wrx,
     })
+  }
+
+  /// The canonicalized root the `Store` is configured with.
+  pub fn root(&self) -> &Path {
+    &self.canon_root
   }
 
   /// Inject a new resource in the cache.
@@ -197,13 +221,12 @@ impl Store {
     let res = Rc::new(RefCell::new(resource));
     let res_ = res.clone();
 
-    // create the path associated with the given key
-    let key_ = key.clone();
-    let path = self.opt.root().join(key.path.clone());
+    let path = key.path.clone();
+    let path_ = key.path.clone();
 
     // closure used to reload the object when needed
     let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), ()>> = Box::new(move |cache| {
-      match T::from_fs(&key_.path, cache) {
+      match T::from_fs(&path_, cache) {
         Ok(load_result) => {
           // replace the current resource with the freshly loaded one
           *res_.borrow_mut() = load_result.res;
@@ -270,7 +293,7 @@ impl Store {
   pub fn sync(&mut self) {
     let update_await_time_ms = self.opt.update_await_time_ms();
 
-    let paths = dequeue_file_changes(&mut self.watcher_rx);
+    let paths = dequeue_file_changes(&mut self.watcher_rx, &self.canon_root);
 
     for path in paths {
       // find the path in our watched paths; if we find it, we remove it prior to doing anything else
@@ -374,11 +397,13 @@ pub enum StoreError {
 
 // TODO: profile and see how not to allocate anything
 /// Dequeue any file changes from a watcher channel and output them in a buffer.
-fn dequeue_file_changes(rx: &mut Receiver<RawEvent>) -> Vec<PathBuf> {
+fn dequeue_file_changes(rx: &mut Receiver<RawEvent>, prefix: &Path) -> Vec<PathBuf> {
   rx.try_iter().filter_map(|event| {
     match event {
       RawEvent { path: Some(ref path), op: Ok(op), .. } if op | WRITE != Op::empty() => {
-        Some(path.clone())
+        // remove the root path so that we end up with the same path as we have stored as keys
+        let path = path.strip_prefix(prefix).unwrap().to_owned();
+        Some(path)
       },
       _ => None
     }
