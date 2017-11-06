@@ -1,5 +1,7 @@
 extern crate warmy;
 
+use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -17,10 +19,25 @@ fn foo() {
   #[derive(Debug, Eq, PartialEq)]
   struct Foo(String);
 
-  impl Load for Foo {
-    type Error = ();
+  #[derive(Debug, Eq, PartialEq)]
+  struct FooErr;
 
-    fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, ()> where P: AsRef<Path> {
+  impl Error for FooErr {
+    fn description(&self) -> &str {
+      "Foo error!"
+    }
+  }
+
+  impl fmt::Display for FooErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+      f.write_str(self.description())
+    }
+  }
+
+  impl Load for Foo {
+    type Error = FooErr;
+
+    fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
       let mut s = String::new();
 
       {

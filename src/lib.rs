@@ -41,6 +41,7 @@ use notify::{Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher, raw_watch
 use notify::op::WRITE;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::marker::PhantomData;
@@ -56,11 +57,19 @@ use std::time::{Duration, Instant};
 /// the `Store`’s functions.
 pub trait Load: 'static + Sized {
   /// Type of error that might happen while loading.
-  type Error;
+  type Error: Error;
 
   /// Load a resource from the file system. The `Store` can be used to load or declare additional
   /// resource dependencies. The result type is used to register for dependency events.
-  fn from_fs<P>(path: P, cache: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path>;
+  fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path>;
+
+  // FIXME: add support for redeclaring the dependencies?
+  /// Function called when a resource must be reloaded.
+  ///
+  /// The default implementation of that function calls `from_fs` and returns its result.
+  fn reload<P>(_: &Self, path: P, store: &mut Store) -> Result<Self, Self::Error> where P: AsRef<Path> {
+    Self::from_fs(path, store).map(|lr| lr.res)
+  }
 }
 
 /// Result of a resource loading. This type enables you to register a resource for reloading events
@@ -209,7 +218,7 @@ impl Store {
     &self.canon_root
   }
 
-  /// Inject a new resource in the cache.
+  /// Inject a new resource in the store.
   fn inject<T>(
     &mut self,
     key: Key<T>,
@@ -225,17 +234,16 @@ impl Store {
     let path_ = key.path.clone();
 
     // closure used to reload the object when needed
-    let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), ()>> = Box::new(move |cache| {
-      match T::from_fs(&path_, cache) {
-        Ok(load_result) => {
+    let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), Box<Error>>> = Box::new(move |store| {
+      let reloaded = T::reload(&res_.borrow(), &path_, store);
+
+      match reloaded {
+        Ok(r) => {
           // replace the current resource with the freshly loaded one
-          *res_.borrow_mut() = load_result.res;
+          *res_.borrow_mut() = r;
           Ok(())
         },
-        Err(_) => {
-          // TODO: what shall we do?
-          Err(())
-        }
+        Err(e) => Err(Box::new(e))
       }
     });
 
@@ -243,7 +251,6 @@ impl Store {
       on_reload: on_reload,
       last_update_instant: Instant::now(),
     };
-
 
     // cache the resource and its meta data
     self.cache.save(key, res.clone());
@@ -257,7 +264,7 @@ impl Store {
     res
   }
 
-  /// Get a resource from the cache and return an error if loading failed.
+  /// Get a resource from the store and return an error if loading failed.
   pub fn get<T>(&mut self, key: &Key<T>) -> Result<Res<T>, T::Error> where T: Load {
     match self.cache.get(key).cloned() {
       Some(resource) => {
@@ -289,7 +296,7 @@ impl Store {
     }
   }
 
-  /// Synchronize the cache by updating the resources that ought to.
+  /// Synchronize the store by updating the resources that ought to.
   pub fn sync(&mut self) {
     let update_await_time_ms = self.opt.update_await_time_ms();
 
@@ -383,12 +390,12 @@ impl StoreOpt {
 /// Meta data about a resource.
 struct ResMetaData {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Store) -> Result<(), ()>>,
+  on_reload: Box<Fn(&mut Store) -> Result<(), Box<Error>>>,
   /// The last time the resource was updated.
   last_update_instant: Instant,
 }
 
-/// Error that might happen when creating a resource cache.
+/// Error that might happen when creating a resource store.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoreError {
   /// The root path for the resources was not found.
