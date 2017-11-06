@@ -56,6 +56,9 @@ fn foo() {
       let _ = fh.write_all(expected2.as_bytes());
     }
 
+    // this sleep is necessary to prevent any race between our thread and the notify’s one
+    ::std::thread::sleep(::std::time::Duration::from_millis(100));
+
     store.sync();
 
     assert_eq!(r.borrow().0, expected2);
