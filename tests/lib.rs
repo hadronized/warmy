@@ -9,6 +9,9 @@ use warmy::{Key, Load, Loaded, Store};
 
 mod utils;
 
+/// Timeout in milliseconds to wait before determining that there’s something wrong with notify.
+const QUEUE_TIMEOUT_MS: u64 = 10000; // 10s
+
 #[test]
 fn create_store() {
   utils::with_store(|_, _| {})
@@ -73,11 +76,17 @@ fn foo() {
       let _ = fh.write_all(expected2.as_bytes());
     }
 
-    // this sleep is necessary to prevent any race between our thread and the notify’s one
-    ::std::thread::sleep(::std::time::Duration::from_millis(100));
+    let start_time = ::std::time::Instant::now();
+    loop {
+      store.sync();
 
-    store.sync();
+      if r.borrow().0 == expected2 {
+        break;
+      }
 
-    assert_eq!(r.borrow().0, expected2);
+      if start_time.elapsed() >= ::std::time::Duration::from_millis(QUEUE_TIMEOUT_MS) {
+        panic!("more than {} milliseconds were spent waiting for a filesystem event", QUEUE_TIMEOUT_MS);
+      }
+    }
   })
 }
