@@ -72,8 +72,10 @@ pub trait Load: 'static + Sized {
   }
 }
 
-/// Result of a resource loading. This type enables you to register a resource for reloading events
-/// of others (dependencies). If you don’t need to run specific code on a dependency reloading, use
+/// Result of a resource loading.
+///
+/// This type enables you to register a resource for reloading events of other resources. Those are
+/// named dependencies. If you don’t need to run specific code on a dependency reloading, use
 /// the `.into()` function to lift your return value to `Loaded<_>` or use the provided
 /// function.
 pub struct Loaded<T> {
@@ -127,8 +129,9 @@ impl<T> Key<T> {
     }
   }
 
-  /// Get the underlying path. This path is relative to the root path of the store the key is used
-  /// in.
+  /// Get the underlying path.
+  ///
+  /// This path is relative to the root path of the store the key is used in.
   pub fn as_path(&self) -> &Path {
     &self.path
   }
@@ -187,8 +190,10 @@ pub struct Store {
 }
 
 impl Store {
-  /// Create a new store. The `root` represents the root directory from all the resources come from
-  /// and is relative to the binary’s location by default (unless you specify it as absolute).
+  /// Create a new store.
+  ///
+  /// The `root` represents the root directory from all the resources come from and is relative to
+  /// the binary’s location by default (unless you specify it as absolute).
   pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
     let root = opt.root().to_owned();
 
