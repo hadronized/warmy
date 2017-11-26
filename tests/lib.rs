@@ -40,11 +40,11 @@ fn foo() {
   impl Load for Foo {
     type Error = FooErr;
 
-    fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
+    fn from_fs<P>(path: P, _: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
       let mut s = String::new();
 
       {
-        let path = store.root().join(path.as_ref());
+        let path = path.as_ref();
         let mut fh = File::open(path).unwrap();
         let _ = fh.read_to_string(&mut s);
       }

@@ -1,3 +1,8 @@
+# 0.3.0
+
+- Fix paths handled to the `from_fs` method. The paths are now correctly prefixed by the
+  canonicalized root.
+
 # 0.2.0
 
 - Overall enhancement of the documentation.

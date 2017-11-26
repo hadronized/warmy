@@ -236,7 +236,7 @@ impl Store {
     let res_ = res.clone();
 
     let path = key.path.clone();
-    let path_ = key.path.clone();
+    let path_ = self.canon_root.join(&key.path);
 
     // closure used to reload the object when needed
     let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), Box<Error>>> = Box::new(move |store| {
@@ -277,7 +277,7 @@ impl Store {
       },
       None => {
         // specific loading
-        let load_result = T::from_fs(&key.path, self)?;
+        let load_result = T::from_fs(self.canon_root.join(&key.path), self)?;
         Ok(self.inject(key.clone(), load_result.res, load_result.deps))
       }
     }
