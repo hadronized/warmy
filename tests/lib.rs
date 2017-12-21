@@ -37,10 +37,10 @@ fn foo() {
     }
   }
 
-  impl Load for Foo {
+  impl Load<()> for Foo {
     type Error = FooErr;
 
-    fn from_fs<P>(path: P, _: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
+    fn from_fs<P>(path: P, _: &mut Store<()>, _: &mut ()) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
       let mut s = String::new();
 
       {
@@ -67,7 +67,7 @@ fn foo() {
       let _ = fh.write_all(expected1.as_bytes());
     }
 
-    let r = store.get(&key).expect("object should be present at the given key");
+    let r = store.get(&key, &mut ()).expect("object should be present at the given key");
 
     assert_eq!(r.borrow().0, expected1);
 
@@ -78,7 +78,7 @@ fn foo() {
 
     let start_time = ::std::time::Instant::now();
     loop {
-      store.sync();
+      store.sync(&mut ());
 
       if r.borrow().0 == expected2 {
         break;
