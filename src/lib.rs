@@ -55,20 +55,20 @@ use std::time::{Duration, Instant};
 /// An object can be loaded from disk if, given a path, it can output a `Loaded<_>`. It’s
 /// important to note that you’re not supposed to use that trait directly. Instead, you should use
 /// the `Store`’s functions.
-pub trait Load: 'static + Sized {
+pub trait Load<C>: 'static + Sized {
   /// Type of error that might happen while loading.
-  type Error: Error;
+  type Error: Error + 'static;
 
   /// Load a resource from the file system. The `Store` can be used to load or declare additional
   /// resource dependencies. The result type is used to register for dependency events.
-  fn from_fs<P>(path: P, store: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path>;
+  fn from_fs<P>(path: P, store: &mut Store<C>, context: &mut C) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path>;
 
   // FIXME: add support for redeclaring the dependencies?
   /// Function called when a resource must be reloaded.
   ///
   /// The default implementation of that function calls `from_fs` and returns its result.
-  fn reload<P>(_: &Self, path: P, store: &mut Store) -> Result<Self, Self::Error> where P: AsRef<Path> {
-    Self::from_fs(path, store).map(|lr| lr.res)
+  fn reload<P>(_: &Self, path: P, store: &mut Store<C>, context: &mut C) -> Result<Self, Self::Error> where P: AsRef<Path> {
+    Self::from_fs(path, store, context).map(|lr| lr.res)
   }
 }
 
@@ -171,7 +171,7 @@ impl<T> CacheKey for Key<T> where T: 'static {
 }
 
 /// Resource store. Responsible for holding and presenting resources.
-pub struct Store {
+pub struct Store<C> {
   // store options
   opt: StoreOpt,
   // canonicalized root path
@@ -179,7 +179,7 @@ pub struct Store {
   // resource cache, containing all living resources
   cache: HashCache,
   // contains all metadata on resources (reload functions, last time updated, etc.)
-  metadata: HashMap<PathBuf, ResMetaData>,
+  metadata: HashMap<PathBuf, ResMetaData<C>>,
   // dependencies, mapping a dependency to its dependent resources
   deps: HashMap<PathBuf, PathBuf>,
   // keep the watcher around so that we don’t have it disconnected
@@ -189,7 +189,7 @@ pub struct Store {
   watcher_rx: Receiver<RawEvent>,
 }
 
-impl Store {
+impl<C> Store<C> {
   /// Create a new store.
   ///
   /// The `root` represents the root directory from all the resources come from and is relative to
@@ -230,7 +230,7 @@ impl Store {
     resource: T,
     deps: Vec<PathBuf>
   ) -> Res<T>
-    where T: Load {
+    where T: Load<C> {
     // wrap the resource to make it shared mutably
     let res = Rc::new(RefCell::new(resource));
     let res_ = res.clone();
@@ -239,8 +239,8 @@ impl Store {
     let path_ = self.canon_root.join(&key.path);
 
     // closure used to reload the object when needed
-    let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), Box<Error>>> = Box::new(move |store| {
-      let reloaded = T::reload(&res_.borrow(), &path_, store);
+    let on_reload: Box<for<'a> Fn(&'a mut Store<C>, &mut C) -> Result<(), Box<Error>>> = Box::new(move |store, context| {
+      let reloaded = T::reload(&res_.borrow(), &path_, store, context);
 
       match reloaded {
         Ok(r) => {
@@ -257,6 +257,7 @@ impl Store {
       last_update_instant: Instant::now(),
     };
 
+
     // cache the resource and its meta data
     self.cache.save(key, res.clone());
     self.metadata.insert(path.clone(), metadata);
@@ -270,14 +271,14 @@ impl Store {
   }
 
   /// Get a resource from the store and return an error if loading failed.
-  pub fn get<T>(&mut self, key: &Key<T>) -> Result<Res<T>, T::Error> where T: Load {
+  pub fn get<T>(&mut self, key: &Key<T>, context: &mut C) -> Result<Res<T>, T::Error> where T: Load<C> {
     match self.cache.get(key).cloned() {
       Some(resource) => {
         Ok(resource)
       },
       None => {
         // specific loading
-        let load_result = T::from_fs(self.canon_root.join(&key.path), self)?;
+        let load_result = T::from_fs(self.canon_root.join(&key.path), self, context)?;
         Ok(self.inject(key.clone(), load_result.res, load_result.deps))
       }
     }
@@ -288,11 +289,12 @@ impl Store {
   pub fn get_proxied<T, P>(
     &mut self,
     key: &Key<T>,
-    proxy: P
+    proxy: P,
+    context: &mut C
   ) -> Res<T>
-    where T: Load,
+    where T: Load<C>,
           P: FnOnce() -> T {
-    match self.get(key) {
+    match self.get(key, context) {
       Ok(resource) => resource,
       Err(_) => {
         // FIXME: we set the dependencies to none here, which is silly; find a better design
@@ -302,7 +304,7 @@ impl Store {
   }
 
   /// Synchronize the store by updating the resources that ought to.
-  pub fn sync(&mut self) {
+  pub fn sync(&mut self, context: &mut C) {
     let update_await_time_ms = self.opt.update_await_time_ms();
 
     let paths = dequeue_file_changes(&mut self.watcher_rx, &self.canon_root);
@@ -315,12 +317,12 @@ impl Store {
         // perform a timed check so that we don’t reload several times in a row the same goddamn
         // resource
         if now.duration_since(metadata.last_update_instant) >= Duration::from_millis(update_await_time_ms) {
-          if (metadata.on_reload)(self).is_ok() {
+          if (metadata.on_reload)(self, context).is_ok() {
             // if we have successfully reloaded the resource, notify the observers that this
             // dependency has changed
             for dep in self.deps.get(path.as_path()).cloned() {
               if let Some(obs_metadata) = self.metadata.remove(dep.as_path()) {
-                match (obs_metadata.on_reload)(self) {
+                match (obs_metadata.on_reload)(self, context) {
                   Ok(_) => { self.metadata.insert(dep, obs_metadata); }
                   _ => ()
                 }
@@ -393,9 +395,9 @@ impl StoreOpt {
 }
 
 /// Meta data about a resource.
-struct ResMetaData {
+struct ResMetaData<C> {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Store) -> Result<(), Box<Error>>>,
+  on_reload: Box<Fn(&mut Store<C>, &mut C) -> Result<(), Box<Error>>>,
   /// The last time the resource was updated.
   last_update_instant: Instant,
 }

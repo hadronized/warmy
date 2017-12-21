@@ -13,7 +13,7 @@ pub fn with_tmp_dir<F, B>(f: F) where F: Fn(&Path) -> B {
   tmp_dir.close().expect("close the temporary directory");
 }
 
-pub fn with_store<F, B>(f: F) where F: Fn(warmy::Store, &Path) -> B {
+pub fn with_store<F, B>(f: F) where F: Fn(warmy::Store<()>, &Path) -> B {
   with_tmp_dir(|tmp_dir| {
     let opt =
       warmy::StoreOpt::default()
