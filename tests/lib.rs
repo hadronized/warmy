@@ -12,6 +12,71 @@ mod utils;
 /// Timeout in milliseconds to wait before determining that there’s something wrong with notify.
 const QUEUE_TIMEOUT_MS: u64 = 10000; // 10s
 
+#[derive(Debug, Eq, PartialEq)]
+struct Foo(String);
+
+#[derive(Debug, Eq, PartialEq)]
+struct FooErr;
+
+impl Error for FooErr {
+  fn description(&self) -> &str {
+    "Foo error!"
+  }
+}
+
+impl fmt::Display for FooErr {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    f.write_str(self.description())
+  }
+}
+
+impl Load for Foo {
+  type Error = FooErr;
+
+  fn from_fs<P>(path: P, _: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
+    let mut s = String::new();
+
+    {
+      let path = path.as_ref();
+      let mut fh = File::open(path).unwrap();
+      let _ = fh.read_to_string(&mut s);
+    }
+
+    let foo = Foo(s);
+
+    Ok(foo.into())
+  }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct Bar(String);
+
+#[derive(Debug, Eq, PartialEq)]
+struct BarErr;
+
+impl Error for BarErr {
+  fn description(&self) -> &str {
+    "Bar error!"
+  }
+}
+
+impl fmt::Display for BarErr {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    f.write_str(self.description())
+  }
+}
+
+impl Load for Bar {
+  type Error = BarErr;
+
+  fn from_fs<P>(_: P, _: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
+    let bar = Bar("bar".to_owned());
+
+    Ok(bar.into())
+  }
+}
+
+
 #[test]
 fn create_store() {
   utils::with_store(|_, _| {})
@@ -19,42 +84,6 @@ fn create_store() {
 
 #[test]
 fn foo() {
-  #[derive(Debug, Eq, PartialEq)]
-  struct Foo(String);
-
-  #[derive(Debug, Eq, PartialEq)]
-  struct FooErr;
-
-  impl Error for FooErr {
-    fn description(&self) -> &str {
-      "Foo error!"
-    }
-  }
-
-  impl fmt::Display for FooErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-      f.write_str(self.description())
-    }
-  }
-
-  impl Load for Foo {
-    type Error = FooErr;
-
-    fn from_fs<P>(path: P, _: &mut Store) -> Result<Loaded<Self>, Self::Error> where P: AsRef<Path> {
-      let mut s = String::new();
-
-      {
-        let path = path.as_ref();
-        let mut fh = File::open(path).unwrap();
-        let _ = fh.read_to_string(&mut s);
-      }
-
-      let foo = Foo(s);
-
-      Ok(foo.into())
-    }
-  }
-
   utils::with_store(|mut store, root_dir| {
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
@@ -88,5 +117,26 @@ fn foo() {
         panic!("more than {} milliseconds were spent waiting for a filesystem event", QUEUE_TIMEOUT_MS);
       }
     }
+  })
+}
+
+#[test]
+fn two_same_paths_diff_typed_diff_keys() {
+  utils::with_store(|mut store, root_dir| {
+    let foo_key: Key<Foo> = Key::new("a.txt");
+    let bar_key: Key<Bar> = Key::new("a.txt");
+    let path = root_dir.join("a.txt");
+
+    // create a.txt
+    {
+      let mut fh = File::create(&path).unwrap();
+      let _ = fh.write_all(&b"foobarzoo"[..]);
+    }
+
+    let foo = store.get(&foo_key).unwrap();
+    assert_eq!(foo.borrow().0.as_str(), "foobarzoo");
+
+    let bar = store.get(&bar_key).unwrap();
+    assert_eq!(bar.borrow().0.as_str(), "bar");
   })
 }
