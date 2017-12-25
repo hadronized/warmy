@@ -121,7 +121,7 @@ fn foo() {
 }
 
 #[test]
-fn two_same_paths_diff_typed_diff_keys() {
+fn two_same_paths_diff_types() {
   utils::with_store(|mut store, root_dir| {
     let foo_key: Key<Foo> = Key::new("a.txt");
     let bar_key: Key<Bar> = Key::new("a.txt");
@@ -136,7 +136,7 @@ fn two_same_paths_diff_typed_diff_keys() {
     let foo = store.get(&foo_key).unwrap();
     assert_eq!(foo.borrow().0.as_str(), "foobarzoo");
 
-    let bar = store.get(&bar_key).unwrap();
-    assert_eq!(bar.borrow().0.as_str(), "bar");
+    let bar = store.get(&bar_key);
+    assert!(bar.is_err());
   })
 }

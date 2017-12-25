@@ -224,19 +224,27 @@ impl Store {
   }
 
   /// Inject a new resource in the store.
+  ///
+  /// The resource might be refused if another resource already uses the same underlying path.
   fn inject<T>(
     &mut self,
     key: Key<T>,
     resource: T,
     deps: Vec<PathBuf>
-  ) -> Res<T>
+  ) -> Result<Res<T>, StoreError>
     where T: Load {
+    let path = key.path.clone();
+
+    // we forbid having two resources pointing to the same path
+    if self.metadata.contains_key(&path) {
+      return Err(StoreError::AlreadyRegisteredPath(path));
+    }
+
+    let path_ = self.canon_root.join(&key.path);
+
     // wrap the resource to make it shared mutably
     let res = Rc::new(RefCell::new(resource));
     let res_ = res.clone();
-
-    let path = key.path.clone();
-    let path_ = self.canon_root.join(&key.path);
 
     // closure used to reload the object when needed
     let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), Box<Error>>> = Box::new(move |store| {
@@ -266,19 +274,19 @@ impl Store {
       self.deps.insert(dep_key, path.clone());
     }
 
-    res
+    Ok(res)
   }
 
   /// Get a resource from the store and return an error if loading failed.
-  pub fn get<T>(&mut self, key: &Key<T>) -> Result<Res<T>, T::Error> where T: Load {
+  pub fn get<T>(&mut self, key: &Key<T>) -> Result<Res<T>, StoreErrorOr<T>> where T: Load {
     match self.cache.get(key).cloned() {
       Some(resource) => {
         Ok(resource)
       },
       None => {
         // specific loading
-        let load_result = T::from_fs(self.canon_root.join(&key.path), self)?;
-        Ok(self.inject(key.clone(), load_result.res, load_result.deps))
+        let load_result = T::from_fs(self.canon_root.join(&key.path), self).map_err(StoreErrorOr::ResError)?;
+        self.inject(key.clone(), load_result.res, load_result.deps).map_err(StoreErrorOr::StoreError)
       }
     }
   }
@@ -289,16 +297,10 @@ impl Store {
     &mut self,
     key: &Key<T>,
     proxy: P
-  ) -> Res<T>
+  ) -> Result<Res<T>, StoreError>
     where T: Load,
           P: FnOnce() -> T {
-    match self.get(key) {
-      Ok(resource) => resource,
-      Err(_) => {
-        // FIXME: we set the dependencies to none here, which is silly; find a better design
-        self.inject(key.clone(), proxy(), Vec::new())
-      }
-    }
+    self.get(key).or(self.inject(key.clone(), proxy(), Vec::new()))
   }
 
   /// Synchronize the store by updating the resources that ought to.
@@ -404,7 +406,58 @@ struct ResMetaData {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoreError {
   /// The root path for the resources was not found.
-  RootDoesDotExit(PathBuf)
+  RootDoesDotExit(PathBuf),
+  /// The path associated with a resource already exists in the `Store`.
+  ///
+  /// > Note: it is not currently possible to have two resources living in a `Store` and pointing to
+  /// > an identical path at the same time.
+  AlreadyRegisteredPath(PathBuf)
+}
+
+impl fmt::Display for StoreError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    f.write_str(self.description())
+  }
+}
+
+impl Error for StoreError {
+  fn description(&self) -> &str {
+    match *self {
+      StoreError::RootDoesDotExit(_) => "root doesn’t exist",
+      StoreError::AlreadyRegisteredPath(_) => "already registered path"
+    }
+  }
+}
+
+/// Either a store error or a resource loading error.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StoreErrorOr<T> where T: Load {
+  /// A store error.
+  StoreError(StoreError),
+  /// A resource error.
+  ResError(T::Error)
+}
+
+impl<T> fmt::Display for StoreErrorOr<T> where T: fmt::Debug + Load {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    f.write_str(self.description())
+  }
+}
+
+impl<T> Error for StoreErrorOr<T> where T: fmt::Debug + Load {
+  fn description(&self) -> &str {
+    match *self {
+      StoreErrorOr::StoreError(ref e) => e.description(),
+      StoreErrorOr::ResError(ref e) => e.description()
+    }
+  }
+
+  fn cause(&self) -> Option<&Error> {
+    match *self {
+      StoreErrorOr::StoreError(ref e) => e.cause(),
+      StoreErrorOr::ResError(ref e) => e.cause()
+    }
+  }
 }
 
 // TODO: profile and see how not to allocate anything
