@@ -50,9 +50,9 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
-/// Loadable object from disk.
+/// Loadable object from the file system.
 ///
-/// An object can be loaded from disk if, given a path, it can output a `Loaded<_>`. It’s
+/// An object can be loaded from the file system if, given a path, it can output a `Loaded<_>`. It’s
 /// important to note that you’re not supposed to use that trait directly. Instead, you should use
 /// the `Store`’s functions.
 pub trait Load: 'static + Sized {
