@@ -13,7 +13,7 @@ readme = "README.md"
 
 [dependencies]
 any-cache = "0.2"
-notify = "4.0"
+notify = "4.0.3"
 
 [dev-dependencies]
 tempdir = "0.3"
