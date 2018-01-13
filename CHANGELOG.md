@@ -1,3 +1,7 @@
+## 0.5.1
+
+- In `Load::reload`, change the `_: &Self` into `&self`. Sorry for that. :D
+
 # 0.5.0
 
 - Fix upper-bounds for notify dependency.

@@ -83,7 +83,7 @@ pub trait Load: 'static + Sized {
   /// Function called when a resource must be reloaded.
   ///
   /// The default implementation of that function calls `load` and returns its result.
-  fn reload(_: &Self, key: Self::Key, store: &mut Store) -> Result<Self, Self::Error> {
+  fn reload(&self, key: Self::Key, store: &mut Store) -> Result<Self, Self::Error> {
     Self::load(key, store).map(|lr| lr.res)
   }
 }
