@@ -407,10 +407,11 @@ impl Store {
             if let Some(deps) = self.deps.get(&dep_key).cloned() {
               for dep in deps {
                 if let Some(obs_metadata) = self.metadata.remove(&dep) {
-                  match (obs_metadata.on_reload)(self) {
-                    Ok(_) => { self.metadata.insert(dep, obs_metadata); }
-                    _ => ()
-                  }
+                  // FIXME: decide what to do with the result (error?)
+                  let _ = (obs_metadata.on_reload)(self);
+
+                  // reinject the dependency once afterwards
+                  self.metadata.insert(dep, obs_metadata);
                 }
               }
             }
