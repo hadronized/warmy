@@ -1,3 +1,7 @@
+## 0.5.2
+
+- Fix premature dependency drop when reloading a resource.
+
 ## 0.5.1
 
 - In `Load::reload`, change the `_: &Self` into `&self`. Sorry for that. :D
