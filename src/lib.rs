@@ -399,7 +399,8 @@ impl Store {
         let now = Instant::now();
 
         // perform a timed check so that we don’t reload several times in a row the same goddamn
-        // resource
+        // resource; this is needed because of some filesystem implementation or programs that would
+        // save a big resource by huge chunks of data: those generate several filesystem events
         if now.duration_since(metadata.last_update_instant) >= Duration::from_millis(update_await_time_ms) {
           if (metadata.on_reload)(self).is_ok() {
             // if we have successfully reloaded the resource, notify the observers that this
@@ -418,6 +419,8 @@ impl Store {
           }
         }
 
+        // we set the new last_update_instant whatever the time check so that we update the last
+        // time a resource was written
         metadata.last_update_instant = now;
         self.metadata.insert(dep_key, metadata);
       }
