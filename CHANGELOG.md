@@ -1,3 +1,11 @@
+# 0.6.0
+
+- Interface change: you now handle a `Store` around, but the `Load` code handles a
+  `Storage` instead of a `Store`. This is needed to enable partial borrowing
+  optimizations.
+- Fix a bug for long-lasting reloading resources and OS bytes chunks streaming.
+- Complete rewrite of internals via partial borrowing and thus, way less allocations.
+
 ## 0.5.2
 
 - Fix premature dependency drop when reloading a resource.

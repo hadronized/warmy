@@ -46,6 +46,7 @@ use std::fmt;
 use std::hash;
 use std::io;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, channel};
@@ -77,14 +78,14 @@ pub trait Load: 'static + Sized {
   /// ```ignore
   ///     Ok(Loaded::with_deps(the_resource, vec![a_key.into(), another_key.into()]))
   /// ```
-  fn load(key: Self::Key, store: &mut Store) -> Result<Loaded<Self>, Self::Error>;
+  fn load(key: Self::Key, storage: &mut Storage) -> Result<Loaded<Self>, Self::Error>;
 
   // FIXME: add support for redeclaring the dependencies?
   /// Function called when a resource must be reloaded.
   ///
   /// The default implementation of that function calls `load` and returns its result.
-  fn reload(&self, key: Self::Key, store: &mut Store) -> Result<Self, Self::Error> {
-    Self::load(key, store).map(|lr| lr.res)
+  fn reload(&self, key: Self::Key, storage: &mut Storage) -> Result<Self, Self::Error> {
+    Self::load(key, storage).map(|lr| lr.res)
   }
 }
 
@@ -250,21 +251,22 @@ impl<T> From<Key<T>> for DepKey where T: Load {
 
 /// Resource store. Responsible for holding and presenting resources.
 pub struct Store {
-  // store options
-  opt: StoreOpt,
-  // canonicalized root path (used for resources loaded from the file system)
-  canon_root: PathBuf,
-  // resource cache, containing all living resources
-  cache: HashCache,
-  // contains all metadata on resources (reload functions, last time updated, etc.)
-  metadata: HashMap<DepKey, ResMetaData>,
-  // dependencies, mapping a dependency to its dependent resources
-  deps: HashMap<DepKey, Vec<DepKey>>,
-  // keep the watcher around so that we don’t have it disconnected
-  #[allow(dead_code)]
-  watcher: RecommendedWatcher,
-  // watcher receiver part of the channel
-  watcher_rx: Receiver<RawEvent>,
+  storage: Storage,
+  synchronizer: Synchronizer
+}
+
+impl Deref for Store {
+  type Target = Storage;
+
+  fn deref(&self) -> &Self::Target {
+    &self.storage
+  }
+}
+
+impl DerefMut for Store {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.storage
+  }
 }
 
 impl Store {
@@ -273,10 +275,9 @@ impl Store {
   /// The `root` represents the root directory from all the resources come from and is relative to
   /// the binary’s location by default (unless you specify it as absolute).
   pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
-    let root = opt.root().to_owned();
-
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
-    let canon_root = root.canonicalize().map_err(|_| StoreError::RootDoesDotExit(root))?;
+    let root = &opt.root;
+    let canon_root = root.canonicalize().map_err(|_| StoreError::RootDoesDotExit(root.to_owned()))?;
 
     // create the mpsc channel to communicate with the file watcher
     let (wsx, wrx) = channel();
@@ -285,146 +286,20 @@ impl Store {
     // spawn a new thread in which we look for events
     let _ = watcher.watch(&canon_root, RecursiveMode::Recursive);
 
-    Ok(Store {
-      opt,
-      canon_root,
-      cache: HashCache::new(),
-      metadata: HashMap::new(),
-      deps: HashMap::new(),
-      watcher,
-      watcher_rx: wrx,
-    })
+    // create the storage
+    let storage = Storage::new(canon_root)?;
+
+    // create the synchronizer
+    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms);
+
+    let store = Store { storage, synchronizer};
+
+    Ok(store)
   }
 
-  /// The canonicalized root the `Store` is configured with.
-  pub fn root(&self) -> &Path {
-    &self.canon_root
-  }
-
-  /// Inject a new resource in the store.
-  ///
-  /// The resource might be refused for several reasons. Further information in the documentation of
-  /// the `StoreError` error type.
-  fn inject<T>(
-    &mut self,
-    key: Key<T>,
-    resource: T,
-    deps: Vec<DepKey>
-  ) -> Result<Res<T>, StoreError>
-  where T: Load,
-        T::Key: Clone + hash::Hash {
-    let inner_key = key.inner.clone();
-    let dep_key = inner_key.clone().into();
-
-    // we forbid having two resources sharing the same key
-    if self.metadata.contains_key(&dep_key) {
-      return Err(StoreError::AlreadyRegisteredKey(dep_key.clone()));
-    }
-
-    // wrap the resource to make it shared mutably
-    let res = Rc::new(RefCell::new(resource));
-    let res_ = res.clone();
-
-    // closure used to reload the object when needed
-    let on_reload: Box<for<'a> Fn(&'a mut Store) -> Result<(), Box<Error>>> = Box::new(move |store| {
-      let reloaded = T::reload(&res_.borrow(), inner_key.clone(), store);
-
-      match reloaded {
-        Ok(r) => {
-          // replace the current resource with the freshly loaded one
-          *res_.borrow_mut() = r;
-          Ok(())
-        },
-        Err(e) => Err(Box::new(e))
-      }
-    });
-
-    let metadata = ResMetaData {
-      on_reload: on_reload,
-      last_update_instant: Instant::now(),
-    };
-
-    // cache the resource and its meta data
-    self.cache.save(key, res.clone());
-    self.metadata.insert(dep_key.clone(), metadata);
-
-    // register the resource as an observer of its dependencies in the dependencies graph
-    for dep in deps {
-      self.deps.entry(dep.clone()).or_insert(Vec::new()).push(dep_key.clone());
-    }
-
-    Ok(res)
-  }
-
-  /// Get a resource from the store and return an error if loading failed.
-  pub fn get<T>(
-    &mut self,
-    key: &Key<T>
-  ) -> Result<Res<T>, StoreErrorOr<T>>
-  where T: Load,
-        T::Key: Clone + hash::Hash {
-    match self.cache.get(key).cloned() {
-      Some(resource) => {
-        Ok(resource)
-      },
-      None => {
-        let loaded = T::load(key.inner.clone(), self).map_err(StoreErrorOr::ResError)?;
-        self.inject(key.clone(), loaded.res, loaded.deps).map_err(StoreErrorOr::StoreError)
-      }
-    }
-  }
-  
-  /// Get a resource from the store for the given key. If it fails, a proxied version is used, which
-  /// will get replaced by the resource once it’s available and reloaded.
-  pub fn get_proxied<T, P>(
-    &mut self,
-    key: &Key<T>,
-    proxy: P
-  ) -> Result<Res<T>, StoreError>
-  where T: Load,
-        T::Key: Clone + hash::Hash,
-        P: FnOnce() -> T {
-    self.get(key).or(self.inject(key.clone(), proxy(), Vec::new()))
-  }
-
-  /// Synchronize the store by updating the resources that ought to.
+  /// Synchronize the `Store` by updating the resources that ought to.
   pub fn sync(&mut self) {
-    let update_await_time_ms = self.opt.update_await_time_ms();
-
-    let dep_keys = dequeue_file_changes(&mut self.watcher_rx);
-
-    for dep_key in dep_keys {
-      // find the path in our watched paths; if we find it, we remove it prior to doing anything else
-      if let Some(mut metadata) = self.metadata.remove(&dep_key) {
-        let now = Instant::now();
-
-        // perform a timed check so that we don’t reload several times in a row the same goddamn
-        // resource; this is needed because of some filesystem implementation or programs that would
-        // save a big resource by huge chunks of data: those generate several filesystem events
-        if now.duration_since(metadata.last_update_instant) >= Duration::from_millis(update_await_time_ms) {
-          if (metadata.on_reload)(self).is_ok() {
-            // if we have successfully reloaded the resource, notify the observers that this
-            // dependency has changed
-            if let Some(deps) = self.deps.get(&dep_key).cloned() {
-              for dep in deps {
-                if let Some(obs_metadata) = self.metadata.remove(&dep) {
-                  // FIXME: decide what to do with the result (error?)
-                  let _ = (obs_metadata.on_reload)(self);
-
-                  // reinject the dependency once afterwards
-                  self.metadata.insert(dep, obs_metadata);
-                }
-              }
-            }
-          }
-        }
-
-        // we set the new last_update_instant whatever the time check so that we update the last
-        // time a resource was written
-        metadata.last_update_instant = now;
-        self.metadata.insert(dep_key, metadata);
-      }
-    }
+    self.synchronizer.sync(&mut self.storage);
   }
 }
 
@@ -484,12 +359,222 @@ impl StoreOpt {
   }
 }
 
-/// Meta data about a resource.
+/// Resource storage.
+///
+/// This type is responsible of storing resources and giving functions to look them up and update
+/// them whenever needed.
+pub struct Storage {
+  // canonicalized root path (used for resources loaded from the file system)
+  canon_root: PathBuf,
+  // resource cache, containing all living resources
+  cache: HashCache,
+  // dependencies, mapping a dependency to its dependent resources
+  deps: HashMap<DepKey, Vec<DepKey>>,
+  // contains all metadata on resources (reload functions)
+  metadata: HashMap<DepKey, ResMetaData>
+}
+
+impl Storage {
+  fn new(canon_root: PathBuf) -> Result<Self, StoreError> {
+    Ok(Storage {
+      canon_root,
+      cache: HashCache::new(),
+      deps: HashMap::new(),
+      metadata: HashMap::new()
+    })
+  }
+
+  /// The canonicalized root the `Storage` is configured with.
+  pub fn root(&self) -> &Path {
+    &self.canon_root
+  }
+
+  /// Inject a new resource in the store.
+  ///
+  /// The resource might be refused for several reasons. Further information in the documentation of
+  /// the `StoreError` error type.
+  fn inject<T>(
+    &mut self,
+    key: Key<T>,
+    resource: T,
+    deps: Vec<DepKey>
+  ) -> Result<Res<T>, StoreError>
+  where T: Load,
+        T::Key: Clone + hash::Hash {
+    let dep_key = key.inner.clone().into();
+
+    // we forbid having two resources sharing the same key
+    if self.metadata.contains_key(&dep_key) {
+      return Err(StoreError::AlreadyRegisteredKey(dep_key));
+    }
+
+    // wrap the resource to make it shared mutably
+    let res = Rc::new(RefCell::new(resource));
+
+    // create the metadata for the resource
+    let res_ = res.clone();
+    let inner_key = key.inner.clone();
+    let metadata = ResMetaData::new(move |storage| {
+      let reloaded = T::reload(&res_.borrow(), inner_key.clone(), storage);
+
+      match reloaded {
+        Ok(r) => {
+          // replace the current resource with the freshly loaded one
+          *res_.borrow_mut() = r;
+          Ok(())
+        },
+        Err(e) => Err(Box::new(e))
+      }
+    });
+
+    self.metadata.insert(dep_key.clone(), metadata);
+
+    // register the resource as an observer of its dependencies in the dependencies graph
+    for dep in deps {
+      self.deps.entry(dep.clone()).or_insert(Vec::new()).push(dep_key.clone());
+    }
+
+    // cache the resource
+    self.cache.save(key, res.clone());
+
+    Ok(res)
+  }
+
+  /// Get a resource from the `Storage` and return an error if loading failed.
+  pub fn get<T>(
+    &mut self,
+    key: &Key<T>
+  ) -> Result<Res<T>, StoreErrorOr<T>>
+  where T: Load,
+        T::Key: Clone + hash::Hash {
+    match self.cache.get(key).cloned() {
+      Some(resource) => {
+        Ok(resource)
+      },
+      None => {
+        let loaded = T::load(key.inner.clone(), self).map_err(StoreErrorOr::ResError)?;
+        self.inject(key.clone(), loaded.res, loaded.deps).map_err(StoreErrorOr::StoreError)
+      }
+    }
+  }
+
+  /// Get a resource from the `Storage` for the given key. If it fails, a proxied version is used,
+  /// which will get replaced by the resource once it’s available and reloaded.
+  pub fn get_proxied<T, P>(
+    &mut self,
+    key: &Key<T>,
+    proxy: P
+  ) -> Result<Res<T>, StoreError>
+  where T: Load,
+        T::Key: Clone + hash::Hash,
+        P: FnOnce() -> T {
+    self.get(key).or(self.inject(key.clone(), proxy(), Vec::new()))
+  }
+}
+
+/// Resource synchronizer.
+///
+/// An object of this type is responsible to synchronize resources living in a store. It keeps in
+/// internal, optimized state to perform correct and efficient synchronization.
+struct Synchronizer {
+  // all the resources that must be reloaded; they’re mapped to the instant they were found updated
+  dirties: HashMap<DepKey, Instant>,
+  // keep the watcher around so that we don’t have it disconnected
+  #[allow(dead_code)]
+  watcher: RecommendedWatcher,
+  // watcher receiver part of the channel
+  watcher_rx: Receiver<RawEvent>,
+  // time in milleseconds to wait before actually invoking the reloading function on a given
+  // resource; the wait is done between the current time and the last time the resource was touched
+  // by the event loop
+  update_await_time_ms: u64
+}
+
+impl Synchronizer {
+  fn new(
+    watcher: RecommendedWatcher,
+    watcher_rx: Receiver<RawEvent>,
+    update_await_time_ms: u64
+  ) -> Self {
+    Synchronizer {
+      dirties: HashMap::new(),
+      watcher,
+      watcher_rx,
+      update_await_time_ms
+    }
+  }
+
+  /// Dequeue any file system events.
+  fn dequeue_fs_events(&mut self) {
+    for event in self.watcher_rx.try_iter() {
+      match event {
+        RawEvent { path: Some(ref path), op: Ok(op), .. } if op | WRITE != Op::empty() => {
+          let dep_key = DepKey::Path(PathKey(path.to_owned()));
+          self.dirties.insert(dep_key, Instant::now());
+        }
+
+        _ => ()
+      }
+    }
+  }
+
+  /// Reload any dirty resource that fulfill its time predicate.
+  fn reload_dirties(&mut self, storage: &mut Storage) {
+    let update_await_time_ms = self.update_await_time_ms;
+
+    //for (dep_key, dirty_instant) in &self.dirties {
+    self.dirties.retain(|dep_key, dirty_instant| {
+      let now = Instant::now();
+
+      // check whether we’ve waited enough to actually invoke the reloading code
+      if now.duration_since(dirty_instant.clone()) >= Duration::from_millis(update_await_time_ms) {
+        // we’ve waited enough; reload
+        if let Some(metadata) = storage.metadata.remove(&dep_key) {
+          if (metadata.on_reload)(storage).is_ok() {
+            // if we have successfully reloaded the resource, notify the observers that this
+            // dependency has changed
+            if let Some(deps) = storage.deps.get(&dep_key).cloned() {
+              for dep in deps {
+                if let Some(obs_metadata) = storage.metadata.remove(&dep) {
+                  // FIXME: decide what to do with the result (error?)
+                  let _ = (obs_metadata.on_reload)(storage);
+
+                  // reinject the dependency once afterwards
+                  storage.metadata.insert(dep, obs_metadata);
+                }
+              }
+            }
+          }
+
+          storage.metadata.insert(dep_key.clone(), metadata);
+        }
+
+        false
+      } else {
+        true
+      }
+    });
+  }
+
+  /// Synchronize the `Storage` by updating the resources that ought to.
+  fn sync(&mut self, storage: &mut Storage) {
+    self.dequeue_fs_events();
+    self.reload_dirties(storage);
+  }
+}
+
+/// Metadata about a resource.
 struct ResMetaData {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Store) -> Result<(), Box<Error>>>,
-  /// The last time the resource was updated.
-  last_update_instant: Instant,
+  on_reload: Box<Fn(&mut Storage) -> Result<(), Box<Error>>>
+}
+
+impl ResMetaData {
+  fn new<F>(f: F) -> Self where F: 'static + Fn(&mut Storage) -> Result<(), Box<Error>> {
+    ResMetaData {
+      on_reload: Box::new(f)
+    }
+  }
 }
 
 /// Error that might happen when creating a resource store.
@@ -577,17 +662,4 @@ impl<T> Error for StoreErrorOr<T> where T: Load, T::Error: fmt::Debug {
       StoreErrorOr::ResError(ref e) => e.cause()
     }
   }
-}
-
-// TODO: profile and see how not to allocate anything
-/// Dequeue any file changes from a watcher channel and output them in a buffer.
-fn dequeue_file_changes(rx: &mut Receiver<RawEvent>) -> Vec<DepKey> {
-  rx.try_iter().filter_map(|event| {
-    match event {
-      RawEvent { path: Some(ref path), op: Ok(op), .. } if op | WRITE != Op::empty() => {
-        Some(DepKey::Path(PathKey(path.to_owned())))
-      },
-      _ => None
-    }
-  }).collect()
 }
