@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
-use warmy::{Key, Load, LogicalKey, Loaded, PathKey, Store};
+use warmy::{Key, Load, LogicalKey, Loaded, PathKey, Storage};
 
 mod utils;
 
@@ -34,7 +34,7 @@ impl Load for Foo {
 
   type Error = FooErr;
 
-  fn load(key: Self::Key, _: &mut Store) -> Result<Loaded<Self>, Self::Error> {
+  fn load(key: Self::Key, _: &mut Storage) -> Result<Loaded<Self>, Self::Error> {
     let mut s = String::new();
 
     {
@@ -73,7 +73,7 @@ impl Load for Bar {
 
   type Error = BarErr;
 
-  fn load(_: Self::Key, _: &mut Store) -> Result<Loaded<Self>, Self::Error> {
+  fn load(_: Self::Key, _: &mut Storage) -> Result<Loaded<Self>, Self::Error> {
     let bar = Bar("bar".to_owned());
     Ok(bar.into())
   }
@@ -102,7 +102,7 @@ impl Load for Zoo {
 
   type Error = ZooErr;
 
-  fn load(key: Self::Key, _: &mut Store) -> Result<Loaded<Self>, Self::Error> {
+  fn load(key: Self::Key, _: &mut Storage) -> Result<Loaded<Self>, Self::Error> {
     let content = key.as_str().to_owned();
     let zoo = Zoo(content);
 
@@ -133,9 +133,9 @@ impl Load for LogicalFoo {
 
   type Error = LogicalFooErr;
 
-  fn load(key: Self::Key, store: &mut Store) -> Result<Loaded<Self>, Self::Error> {
+  fn load(key: Self::Key, storage: &mut Storage) -> Result<Loaded<Self>, Self::Error> {
     let key: Key<Foo> = Key::path(key.as_str()).expect("logical foo path");
-    let foo = store.get(&key).unwrap();
+    let foo = storage.get(&key).unwrap();
 
     let content = foo.borrow().0.clone();
     let zoo = LogicalFoo(content);
