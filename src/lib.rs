@@ -313,7 +313,7 @@ impl Default for StoreOpt {
   fn default() -> Self {
     StoreOpt {
       root: PathBuf::from("."),
-      update_await_time_ms: 1000
+      update_await_time_ms: 50
     }
   }
 }
@@ -324,7 +324,7 @@ impl StoreOpt {
   ///
   /// # Default
   ///
-  /// Defaults to `1000`.
+  /// Defaults to `50` milliseconds.
   #[inline]
   pub fn set_update_await_time_ms(self, ms: u64) -> Self {
     StoreOpt {
