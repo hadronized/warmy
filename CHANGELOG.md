@@ -1,5 +1,14 @@
 # 0.6.0
 
+- The `update_await_time_ms` `StoreOpt` value is now defaulted to **50ms**. You must think of it as:
+  “If a resource gets written, if nothing happens for the next `update_await_time_ms`, reload it.”
+  You are free to change that value and experiment with it. However, keep in mind that a too much
+  high value would result in latency, and that a too much low value could miss give you an incorrect
+  behavior. To understand that, think of a copy of a large resource (a texture for instance). It’s
+  very likely that the resource will be stream-copied to the file system, generating several write
+  file system event that `warmy` will see. If the time between each write is higher than the value
+  of `update_await_time_ms`, the reload code will be ran while the resource is still being
+  stream-copied! Thus, **50ms** seems pretty fair (it’s actually pretty high, but you never know).
 - Interface change: you now handle a `Store` around, but the `Load` code handles a
   `Storage` instead of a `Store`. This is needed to enable partial borrowing
   optimizations.
