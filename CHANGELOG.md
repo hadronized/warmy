@@ -1,3 +1,9 @@
+## 0.6.1
+
+> Saturday, April, 7th 2018
+
+- Add functions to build both `PathKey` and `LogicalKey`.
+
 # 0.6.0
 
 - The `update_await_time_ms` `StoreOpt` value is now defaulted to **50ms**. You must think of it as:
