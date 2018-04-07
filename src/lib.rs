@@ -144,6 +144,10 @@ impl From<LogicalKey> for DepKey {
 pub struct PathKey(PathBuf);
 
 impl PathKey {
+  pub fn new(path: &Path) -> Result<Self, io::Error> {
+    path.canonicalize().map(PathKey)
+  }
+
   pub fn as_path(&self) -> &Path {
     &self.0
   }
@@ -154,6 +158,10 @@ impl PathKey {
 pub struct LogicalKey(String);
 
 impl LogicalKey {
+  pub fn new(s: String) -> Self {
+    LogicalKey(s)
+  }
+
   pub fn as_str(&self) -> &str {
     &self.0
   }
@@ -180,7 +188,7 @@ impl<T> Key<T> where T: Load<Key = PathKey> {
   ///
   /// Because the path needs to be canonicalized, this function might fail if the canonicalization
   /// cannot happen.
-  pub fn path<P>(path: P) -> io::Result<Self> where P: AsRef<Path> {
+  pub fn path<P>(path: P) -> Result<Self, io::Error> where P: AsRef<Path> {
     let canon_path = path.as_ref().canonicalize()?;
 
     Ok(Key {
