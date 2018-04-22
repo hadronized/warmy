@@ -522,7 +522,6 @@ impl Synchronizer {
   fn reload_dirties(&mut self, storage: &mut Storage) {
     let update_await_time_ms = self.update_await_time_ms;
 
-    //for (dep_key, dirty_instant) in &self.dirties {
     self.dirties.retain(|dep_key, dirty_instant| {
       let now = Instant::now();
 
