@@ -37,7 +37,7 @@ extern crate notify;
 
 use any_cache::{Cache, HashCache};
 pub use any_cache::CacheKey;
-use notify::{Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher, raw_watcher};
+use notify::{raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use notify::op::WRITE;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -49,21 +49,21 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{channel, Receiver};
 use std::time::{Duration, Instant};
 
 /// Loadable object from either the file system or memory.
 ///
 /// An object can be loaded if it can output a `Loaded<_>`. It’s important to note that you’re not
 /// supposed to use that trait directly. Instead, you should use the `Store`’s functions.
-pub trait Load: 'static + Sized {
+pub trait Load<C>: 'static + Sized {
   /// Type of the key used to load the resource.
   ///
   /// You have two choices:
   ///
   /// - `PathKey`, used to load your resource from the file system.
   /// - `LogicalKey`, used to compute your resource from memory.
-  type Key: Into<DepKey>;
+  type Key: Into<DepKey> + 'static;
 
   /// Type of error that might happen while loading.
   type Error: Error;
@@ -78,14 +78,23 @@ pub trait Load: 'static + Sized {
   /// ```ignore
   ///     Ok(Loaded::with_deps(the_resource, vec![a_key.into(), another_key.into()]))
   /// ```
-  fn load(key: Self::Key, storage: &mut Storage) -> Result<Loaded<Self>, Self::Error>;
+  fn load(
+    key: Self::Key,
+    ctx: &mut C,
+    storage: &mut Storage<C>,
+  ) -> Result<Loaded<Self>, Self::Error>;
 
   // FIXME: add support for redeclaring the dependencies?
   /// Function called when a resource must be reloaded.
   ///
   /// The default implementation of that function calls `load` and returns its result.
-  fn reload(&self, key: Self::Key, storage: &mut Storage) -> Result<Self, Self::Error> {
-    Self::load(key, storage).map(|lr| lr.res)
+  fn reload(
+    &self,
+    key: Self::Key,
+    ctx: &mut C,
+    storage: &mut Storage<C>,
+  ) -> Result<Self, Self::Error> {
+    Self::load(key, ctx, storage).map(|lr| lr.res)
   }
 }
 
@@ -99,13 +108,16 @@ pub struct Loaded<T> {
   /// The loaded object.
   pub res: T,
   /// The list of dependencies to listen for events.
-  pub deps: Vec<DepKey>
+  pub deps: Vec<DepKey>,
 }
 
 impl<T> Loaded<T> {
   /// Return a resource declaring no dependency at all.
   pub fn without_dep(res: T) -> Self {
-    Loaded { res, deps: Vec::new() }
+    Loaded {
+      res,
+      deps: Vec::new(),
+    }
   }
 
   /// Return a resource along with its dependencies.
@@ -124,7 +136,7 @@ impl<T> From<T> for Loaded<T> {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum DepKey {
   Path(PathKey),
-  Logical(LogicalKey)
+  Logical(LogicalKey),
 }
 
 impl From<PathKey> for DepKey {
@@ -170,22 +182,31 @@ pub type Res<T> = Rc<RefCell<T>>;
 /// You can use the `Key::path` and `Key::logical` functions to create new keys.
 ///
 /// > `let the_key = Key::path("maps/deck_16/room_3.bsp");`
-pub struct Key<T> where T: Load {
+pub struct Key<T, C>
+where
+  T: Load<C>,
+{
   inner: T::Key,
-  _t: PhantomData<*const T>
+  _t: PhantomData<*const T>,
 }
 
-impl<T> Key<T> where T: Load<Key = PathKey> {
+impl<T, C> Key<T, C>
+where
+  T: Load<C, Key = PathKey>,
+{
   /// Create a new key from a path.
   ///
   /// Because the path needs to be canonicalized, this function might fail if the canonicalization
   /// cannot happen.
-  pub fn path<P>(path: P) -> io::Result<Self> where P: AsRef<Path> {
+  pub fn path<P>(path: P) -> io::Result<Self>
+  where
+    P: AsRef<Path>,
+  {
     let canon_path = path.as_ref().canonicalize()?;
 
     Ok(Key {
       inner: PathKey(canon_path),
-      _t: PhantomData
+      _t: PhantomData,
     })
   }
 
@@ -195,12 +216,15 @@ impl<T> Key<T> where T: Load<Key = PathKey> {
   }
 }
 
-impl<T> Key<T> where T: Load<Key = LogicalKey> {
+impl<T, C> Key<T, C>
+where
+  T: Load<C, Key = LogicalKey>,
+{
   /// Create a new logical key.
   pub fn logical(id: &str) -> Self {
     Key {
       inner: LogicalKey(id.to_owned()),
-      _t: PhantomData
+      _t: PhantomData,
     }
   }
 
@@ -210,66 +234,98 @@ impl<T> Key<T> where T: Load<Key = LogicalKey> {
   }
 }
 
-impl<T> Clone for Key<T> where T: Load, T::Key: Clone {
+impl<T, C> Clone for Key<T, C>
+where
+  T: Load<C>,
+  T::Key: Clone,
+{
   fn clone(&self) -> Self {
     Key {
       inner: self.inner.clone(),
-      _t: PhantomData
+      _t: PhantomData,
     }
   }
 }
 
-impl<T> fmt::Debug for Key<T> where T: Load, T::Key: fmt::Debug {
+impl<T, C> fmt::Debug for Key<T, C>
+where
+  T: Load<C>,
+  T::Key: fmt::Debug,
+{
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     self.inner.fmt(f)
   }
 }
 
-impl<T> Eq for Key<T> where T: Load, T::Key: Eq {}
+impl<T, C> Eq for Key<T, C>
+where
+  T: Load<C>,
+  T::Key: Eq,
+{
+}
 
-impl<T> hash::Hash for Key<T> where T: Load, T::Key: hash::Hash {
-  fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
+impl<T, C> hash::Hash for Key<T, C>
+where
+  T: Load<C>,
+  T::Key: hash::Hash,
+{
+  fn hash<H>(&self, state: &mut H)
+  where
+    H: hash::Hasher,
+  {
     self.inner.hash(state)
   }
 }
 
-impl<T> PartialEq for Key<T> where T: Load, T::Key: PartialEq {
+impl<T, C> PartialEq for Key<T, C>
+where
+  T: Load<C>,
+  T::Key: PartialEq,
+{
   fn eq(&self, rhs: &Self) -> bool {
     self.inner.eq(&rhs.inner)
   }
 }
 
-impl<T> CacheKey for Key<T> where T: 'static + Load, T::Key: hash::Hash {
+impl<T, C> CacheKey for Key<T, C>
+where
+  T: 'static + Load<C>,
+  T::Key: hash::Hash,
+  C: 'static,
+{
   type Target = Res<T>;
 }
 
-impl<T> From<Key<T>> for DepKey where T: Load {
-  fn from(key: Key<T>) -> Self {
+impl<T, C> From<Key<T, C>> for DepKey
+where
+  T: Load<C>,
+{
+  fn from(key: Key<T, C>) -> Self {
     key.inner.into()
   }
 }
 
 /// Resource store. Responsible for holding and presenting resources.
-pub struct Store {
-  storage: Storage,
-  synchronizer: Synchronizer
+pub struct Store<C: 'static> {
+  storage: Storage<C>,
+  synchronizer: Synchronizer,
 }
 
-impl Deref for Store {
-  type Target = Storage;
+impl<C> Deref for Store<C> {
+  type Target = Storage<C>;
 
   fn deref(&self) -> &Self::Target {
     &self.storage
   }
 }
 
-impl DerefMut for Store {
+impl<C> DerefMut for Store<C> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.storage
   }
 }
 
-impl Store {
+impl<C> Store<C> {
   /// Create a new store.
   ///
   /// The `root` represents the root directory from all the resources come from and is relative to
@@ -277,7 +333,9 @@ impl Store {
   pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
     let root = &opt.root;
-    let canon_root = root.canonicalize().map_err(|_| StoreError::RootDoesDotExit(root.to_owned()))?;
+    let canon_root = root
+      .canonicalize()
+      .map_err(|_| StoreError::RootDoesDotExit(root.to_owned()))?;
 
     // create the mpsc channel to communicate with the file watcher
     let (wsx, wrx) = channel();
@@ -292,28 +350,31 @@ impl Store {
     // create the synchronizer
     let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms);
 
-    let store = Store { storage, synchronizer};
+    let store = Store {
+      storage,
+      synchronizer,
+    };
 
     Ok(store)
   }
 
   /// Synchronize the `Store` by updating the resources that ought to.
-  pub fn sync(&mut self) {
-    self.synchronizer.sync(&mut self.storage);
+  pub fn sync(&mut self, ctx: &mut C) {
+    self.synchronizer.sync(ctx, &mut self.storage);
   }
 }
 
 /// Various options to customize a `Store`.
 pub struct StoreOpt {
   root: PathBuf,
-  update_await_time_ms: u64
+  update_await_time_ms: u64,
 }
 
 impl Default for StoreOpt {
   fn default() -> Self {
     StoreOpt {
       root: PathBuf::from("."),
-      update_await_time_ms: 50
+      update_await_time_ms: 50,
     }
   }
 }
@@ -329,7 +390,7 @@ impl StoreOpt {
   pub fn set_update_await_time_ms(self, ms: u64) -> Self {
     StoreOpt {
       update_await_time_ms: ms,
-      .. self
+      ..self
     }
   }
 
@@ -345,10 +406,13 @@ impl StoreOpt {
   ///
   /// Defaults to `"."`.
   #[inline]
-  pub fn set_root<P>(self, root: P) -> Self where P: AsRef<Path> {
+  pub fn set_root<P>(self, root: P) -> Self
+  where
+    P: AsRef<Path>,
+  {
     StoreOpt {
       root: root.as_ref().to_owned(),
-      .. self
+      ..self
     }
   }
 
@@ -363,7 +427,7 @@ impl StoreOpt {
 ///
 /// This type is responsible of storing resources and giving functions to look them up and update
 /// them whenever needed.
-pub struct Storage {
+pub struct Storage<C: 'static> {
   // canonicalized root path (used for resources loaded from the file system)
   canon_root: PathBuf,
   // resource cache, containing all living resources
@@ -371,16 +435,16 @@ pub struct Storage {
   // dependencies, mapping a dependency to its dependent resources
   deps: HashMap<DepKey, Vec<DepKey>>,
   // contains all metadata on resources (reload functions)
-  metadata: HashMap<DepKey, ResMetaData>
+  metadata: HashMap<DepKey, ResMetaData<C>>,
 }
 
-impl Storage {
+impl<C> Storage<C> {
   fn new(canon_root: PathBuf) -> Result<Self, StoreError> {
     Ok(Storage {
       canon_root,
       cache: HashCache::new(),
       deps: HashMap::new(),
-      metadata: HashMap::new()
+      metadata: HashMap::new(),
     })
   }
 
@@ -395,12 +459,14 @@ impl Storage {
   /// the `StoreError` error type.
   fn inject<T>(
     &mut self,
-    key: Key<T>,
+    key: Key<T, C>,
     resource: T,
-    deps: Vec<DepKey>
+    deps: Vec<DepKey>,
   ) -> Result<Res<T>, StoreError>
-  where T: Load,
-        T::Key: Clone + hash::Hash {
+  where
+    T: Load<C>,
+    T::Key: Clone + hash::Hash + 'static,
+  {
     let dep_key = key.inner.clone().into();
 
     // we forbid having two resources sharing the same key
@@ -414,16 +480,16 @@ impl Storage {
     // create the metadata for the resource
     let res_ = res.clone();
     let inner_key = key.inner.clone();
-    let metadata = ResMetaData::new(move |storage| {
-      let reloaded = T::reload(&res_.borrow(), inner_key.clone(), storage);
+    let metadata = ResMetaData::new(move |ctx: &mut C, storage| {
+      let reloaded = T::reload(&res_.borrow(), inner_key.clone(), ctx, storage);
 
       match reloaded {
         Ok(r) => {
           // replace the current resource with the freshly loaded one
           *res_.borrow_mut() = r;
           Ok(())
-        },
-        Err(e) => Err(Box::new(e))
+        }
+        Err(e) => Err(Box::new(e)),
       }
     });
 
@@ -431,7 +497,11 @@ impl Storage {
 
     // register the resource as an observer of its dependencies in the dependencies graph
     for dep in deps {
-      self.deps.entry(dep.clone()).or_insert(Vec::new()).push(dep_key.clone());
+      self
+        .deps
+        .entry(dep.clone())
+        .or_insert(Vec::new())
+        .push(dep_key.clone());
     }
 
     // cache the resource
@@ -441,19 +511,18 @@ impl Storage {
   }
 
   /// Get a resource from the `Storage` and return an error if loading failed.
-  pub fn get<T>(
-    &mut self,
-    key: &Key<T>
-  ) -> Result<Res<T>, StoreErrorOr<T>>
-  where T: Load,
-        T::Key: Clone + hash::Hash {
+  pub fn get<T>(&mut self, key: &Key<T, C>, ctx: &mut C) -> Result<Res<T>, StoreErrorOr<T, C>>
+  where
+    T: Load<C>,
+    T::Key: Clone + hash::Hash,
+  {
     match self.cache.get(key).cloned() {
-      Some(resource) => {
-        Ok(resource)
-      },
+      Some(resource) => Ok(resource),
       None => {
-        let loaded = T::load(key.inner.clone(), self).map_err(StoreErrorOr::ResError)?;
-        self.inject(key.clone(), loaded.res, loaded.deps).map_err(StoreErrorOr::StoreError)
+        let loaded = T::load(key.inner.clone(), ctx, self).map_err(StoreErrorOr::ResError)?;
+        self
+          .inject(key.clone(), loaded.res, loaded.deps)
+          .map_err(StoreErrorOr::StoreError)
       }
     }
   }
@@ -462,13 +531,18 @@ impl Storage {
   /// which will get replaced by the resource once it’s available and reloaded.
   pub fn get_proxied<T, P>(
     &mut self,
-    key: &Key<T>,
-    proxy: P
+    key: &Key<T, C>,
+    ctx: &mut C,
+    proxy: P,
   ) -> Result<Res<T>, StoreError>
-  where T: Load,
-        T::Key: Clone + hash::Hash,
-        P: FnOnce() -> T {
-    self.get(key).or(self.inject(key.clone(), proxy(), Vec::new()))
+  where
+    T: Load<C>,
+    T::Key: Clone + hash::Hash,
+    P: FnOnce() -> T,
+  {
+    self
+      .get(key, ctx)
+      .or(self.inject(key.clone(), proxy(), Vec::new()))
   }
 }
 
@@ -487,20 +561,20 @@ struct Synchronizer {
   // time in milleseconds to wait before actually invoking the reloading function on a given
   // resource; the wait is done between the current time and the last time the resource was touched
   // by the event loop
-  update_await_time_ms: u64
+  update_await_time_ms: u64,
 }
 
 impl Synchronizer {
   fn new(
     watcher: RecommendedWatcher,
     watcher_rx: Receiver<RawEvent>,
-    update_await_time_ms: u64
+    update_await_time_ms: u64,
   ) -> Self {
     Synchronizer {
       dirties: HashMap::new(),
       watcher,
       watcher_rx,
-      update_await_time_ms
+      update_await_time_ms,
     }
   }
 
@@ -508,18 +582,23 @@ impl Synchronizer {
   fn dequeue_fs_events(&mut self) {
     for event in self.watcher_rx.try_iter() {
       match event {
-        RawEvent { path: Some(ref path), op: Ok(op), .. } if op | WRITE != Op::empty() => {
+        RawEvent {
+          path: Some(ref path),
+          op: Ok(op),
+          ..
+        } if op | WRITE != Op::empty() =>
+        {
           let dep_key = DepKey::Path(PathKey(path.to_owned()));
           self.dirties.insert(dep_key, Instant::now());
         }
 
-        _ => ()
+        _ => (),
       }
     }
   }
 
   /// Reload any dirty resource that fulfill its time predicate.
-  fn reload_dirties(&mut self, storage: &mut Storage) {
+  fn reload_dirties<C>(&mut self, ctx: &mut C, storage: &mut Storage<C>) {
     let update_await_time_ms = self.update_await_time_ms;
 
     self.dirties.retain(|dep_key, dirty_instant| {
@@ -529,14 +608,14 @@ impl Synchronizer {
       if now.duration_since(dirty_instant.clone()) >= Duration::from_millis(update_await_time_ms) {
         // we’ve waited enough; reload
         if let Some(metadata) = storage.metadata.remove(&dep_key) {
-          if (metadata.on_reload)(storage).is_ok() {
+          if (metadata.on_reload)(ctx, storage).is_ok() {
             // if we have successfully reloaded the resource, notify the observers that this
             // dependency has changed
             if let Some(deps) = storage.deps.get(&dep_key).cloned() {
               for dep in deps {
                 if let Some(obs_metadata) = storage.metadata.remove(&dep) {
                   // FIXME: decide what to do with the result (error?)
-                  let _ = (obs_metadata.on_reload)(storage);
+                  let _ = (obs_metadata.on_reload)(ctx, storage);
 
                   // reinject the dependency once afterwards
                   storage.metadata.insert(dep, obs_metadata);
@@ -556,22 +635,25 @@ impl Synchronizer {
   }
 
   /// Synchronize the `Storage` by updating the resources that ought to.
-  fn sync(&mut self, storage: &mut Storage) {
+  fn sync<C>(&mut self, ctx: &mut C, storage: &mut Storage<C>) {
     self.dequeue_fs_events();
-    self.reload_dirties(storage);
+    self.reload_dirties(ctx, storage);
   }
 }
 
 /// Metadata about a resource.
-struct ResMetaData {
+struct ResMetaData<C: 'static> {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Storage) -> Result<(), Box<Error>>>
+  on_reload: Box<Fn(&mut C, &mut Storage<C>) -> Result<(), Box<Error>>>,
 }
 
-impl ResMetaData {
-  fn new<F>(f: F) -> Self where F: 'static + Fn(&mut Storage) -> Result<(), Box<Error>> {
+impl<C> ResMetaData<C> {
+  fn new<F>(f: F) -> Self
+  where
+    F: 'static + Fn(&mut C, &mut Storage<C>) -> Result<(), Box<Error>>,
+  {
     ResMetaData {
-      on_reload: Box::new(f)
+      on_reload: Box::new(f),
     }
   }
 }
@@ -585,7 +667,7 @@ pub enum StoreError {
   ///
   /// > Note: it is not currently possible to have two resources living in a `Store` and using an
   /// > identical key at the same time.
-  AlreadyRegisteredKey(DepKey)
+  AlreadyRegisteredKey(DepKey),
 }
 
 impl fmt::Display for StoreError {
@@ -598,67 +680,95 @@ impl Error for StoreError {
   fn description(&self) -> &str {
     match *self {
       StoreError::RootDoesDotExit(_) => "root doesn’t exist",
-      StoreError::AlreadyRegisteredKey(_) => "already registered key"
+      StoreError::AlreadyRegisteredKey(_) => "already registered key",
     }
   }
 }
 
 /// Either a store error or a resource loading error.
-pub enum StoreErrorOr<T> where T: Load {
+pub enum StoreErrorOr<T, C>
+where
+  T: Load<C>,
+{
   /// A store error.
   StoreError(StoreError),
   /// A resource error.
-  ResError(T::Error)
+  ResError(T::Error),
 }
 
-impl<T> Clone for StoreErrorOr<T> where T: Load, T::Error: Clone {
+impl<T, C> Clone for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: Clone,
+{
   fn clone(&self) -> Self {
     match *self {
       StoreErrorOr::StoreError(ref e) => StoreErrorOr::StoreError(e.clone()),
-      StoreErrorOr::ResError(ref e) => StoreErrorOr::ResError(e.clone())
+      StoreErrorOr::ResError(ref e) => StoreErrorOr::ResError(e.clone()),
     }
   }
 }
 
-impl<T> Eq for StoreErrorOr<T> where T: Load, T::Error: Eq {}
+impl<T, C> Eq for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: Eq,
+{
+}
 
-impl<T> PartialEq for StoreErrorOr<T> where T: Load, T::Error: PartialEq {
+impl<T, C> PartialEq for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: PartialEq,
+{
   fn eq(&self, rhs: &Self) -> bool {
     match (self, rhs) {
       (&StoreErrorOr::StoreError(ref a), &StoreErrorOr::StoreError(ref b)) => a == b,
       (&StoreErrorOr::ResError(ref a), &StoreErrorOr::ResError(ref b)) => a == b,
-      _ => false
+      _ => false,
     }
   }
 }
 
-impl<T> fmt::Debug for StoreErrorOr<T> where T: Load, T::Error: fmt::Debug {
+impl<T, C> fmt::Debug for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: fmt::Debug,
+{
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
       StoreErrorOr::StoreError(ref e) => f.debug_tuple("StoreError").field(e).finish(),
-      StoreErrorOr::ResError(ref e) => f.debug_tuple("ResError").field(e).finish()
+      StoreErrorOr::ResError(ref e) => f.debug_tuple("ResError").field(e).finish(),
     }
   }
 }
 
-impl<T> fmt::Display for StoreErrorOr<T> where T: Load, T::Error: fmt::Debug {
+impl<T, C> fmt::Display for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: fmt::Debug,
+{
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     f.write_str(self.description())
   }
 }
 
-impl<T> Error for StoreErrorOr<T> where T: Load, T::Error: fmt::Debug {
+impl<T, C> Error for StoreErrorOr<T, C>
+where
+  T: Load<C>,
+  T::Error: fmt::Debug,
+{
   fn description(&self) -> &str {
     match *self {
       StoreErrorOr::StoreError(ref e) => e.description(),
-      StoreErrorOr::ResError(ref e) => e.description()
+      StoreErrorOr::ResError(ref e) => e.description(),
     }
   }
 
   fn cause(&self) -> Option<&Error> {
     match *self {
       StoreErrorOr::StoreError(ref e) => e.cause(),
-      StoreErrorOr::ResError(ref e) => e.cause()
+      StoreErrorOr::ResError(ref e) => e.cause(),
     }
   }
 }
