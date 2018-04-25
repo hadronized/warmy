@@ -39,6 +39,6 @@ pub mod key;
 pub mod load;
 pub mod res;
 
-pub use load::{Load, Loaded, Store, StoreError, StoreErrorOr, StoreOpt, Storage};
 pub use key::{DepKey, FSKey, Key, LogicalKey};
+pub use load::{Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
 pub use res::Res;

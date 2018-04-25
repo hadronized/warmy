@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
-use warmy::{Load, FSKey, LogicalKey, Loaded, Res, Storage};
+use warmy::{FSKey, Load, Loaded, LogicalKey, Res, Storage};
 
 mod utils;
 
@@ -164,7 +164,9 @@ fn foo() {
       let _ = fh.write_all(expected1.as_bytes());
     }
 
-    let r: Res<Foo> = store.get(&key).expect("object should be present at the given key");
+    let r: Res<Foo> = store
+      .get(&key)
+      .expect("object should be present at the given key");
 
     assert_eq!(r.borrow().0, expected1);
 
@@ -182,7 +184,10 @@ fn foo() {
       }
 
       if start_time.elapsed() >= ::std::time::Duration::from_millis(QUEUE_TIMEOUT_MS) {
-        panic!("more than {} milliseconds were spent waiting for a filesystem event", QUEUE_TIMEOUT_MS);
+        panic!(
+          "more than {} milliseconds were spent waiting for a filesystem event",
+          QUEUE_TIMEOUT_MS
+        );
       }
     }
   })
@@ -202,7 +207,9 @@ fn foo_with_leading_slash() {
       let _ = fh.write_all(expected1.as_bytes());
     }
 
-    let r: Res<Foo> = store.get(&key).expect("object should be present at the given key");
+    let r: Res<Foo> = store
+      .get(&key)
+      .expect("object should be present at the given key");
 
     assert_eq!(r.borrow().0, expected1);
 
@@ -220,7 +227,10 @@ fn foo_with_leading_slash() {
       }
 
       if start_time.elapsed() >= ::std::time::Duration::from_millis(QUEUE_TIMEOUT_MS) {
-        panic!("more than {} milliseconds were spent waiting for a filesystem event", QUEUE_TIMEOUT_MS);
+        panic!(
+          "more than {} milliseconds were spent waiting for a filesystem event",
+          QUEUE_TIMEOUT_MS
+        );
       }
     }
   })
@@ -270,7 +280,9 @@ fn logical_with_deps() {
       let _ = fh.write_all(expected1.as_bytes());
     }
 
-    let _: Res<Foo> = store.get(&foo_key).expect("object should be present at the given key");
+    let _: Res<Foo> = store
+      .get(&foo_key)
+      .expect("object should be present at the given key");
 
     let log_foo_key = LogicalKey::new(foo_key.as_path().to_str().unwrap());
     let log_foo: Res<LogicalFoo> = store.get(&log_foo_key).unwrap();
@@ -292,7 +304,10 @@ fn logical_with_deps() {
 
       if start_time.elapsed() >= ::std::time::Duration::from_millis(QUEUE_TIMEOUT_MS) {
         eprintln!("log_foo = {:?}", log_foo.borrow().0.as_str());
-        panic!("more than {} milliseconds were spent waiting for a filesystem event", QUEUE_TIMEOUT_MS);
+        panic!(
+          "more than {} milliseconds were spent waiting for a filesystem event",
+          QUEUE_TIMEOUT_MS
+        );
       }
     }
   })

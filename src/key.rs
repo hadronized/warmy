@@ -1,23 +1,22 @@
 use any_cache::CacheKey;
-use std::{
-  hash,
-  marker::PhantomData,
-  path::{Component, Path, PathBuf}
-};
+use std::{hash,
+          marker::PhantomData,
+          path::{Component, Path, PathBuf}};
 
 use res::Res;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum DepKey {
   Path(PathBuf),
-  Logical(String)
+  Logical(String),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FSKey(PathBuf);
 
 impl FSKey {
-  pub fn new<P>(path: P) -> Self where P: AsRef<Path> {
+  pub fn new<P>(path: P) -> Self
+  where P: AsRef<Path> {
     FSKey(path.as_ref().to_owned())
   }
 
@@ -36,7 +35,8 @@ impl From<FSKey> for DepKey {
 pub struct LogicalKey(String);
 
 impl LogicalKey {
-  pub fn new<S>(s: S) -> Self where S: AsRef<str> {
+  pub fn new<S>(s: S) -> Self
+  where S: AsRef<str> {
     LogicalKey(s.as_ref().to_owned())
   }
 
@@ -59,7 +59,7 @@ impl Key for DepKey {
   fn prepare_key(self, root: &Path) -> Self {
     match self {
       DepKey::Path(path) => DepKey::Path(vfs_substite_path(&path, root)),
-      DepKey::Logical(x) => DepKey::Logical(x)
+      DepKey::Logical(x) => DepKey::Logical(x),
     }
   }
 }
@@ -87,12 +87,9 @@ fn vfs_substite_path(path: &Path, root: &Path) -> PathBuf {
       root_components.chain(components.skip(1)).collect()
     }
 
-    _ => {
-      root_components.chain(components).collect()
-    }
+    _ => root_components.chain(components).collect(),
   }
 }
-
 
 pub(crate) struct PrivateKey<T>(DepKey, PhantomData<T>);
 
@@ -103,11 +100,14 @@ impl<T> PrivateKey<T> {
 }
 
 impl<T> hash::Hash for PrivateKey<T> {
-  fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
+  fn hash<H>(&self, state: &mut H)
+  where H: hash::Hasher {
     self.0.hash(state)
   }
 }
 
-impl<T> CacheKey for PrivateKey<T> where T: 'static {
+impl<T> CacheKey for PrivateKey<T>
+where T: 'static
+{
   type Target = Res<T>;
 }

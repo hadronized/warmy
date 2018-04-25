@@ -1,8 +1,6 @@
-use std::{
-  cell::RefCell,
-  ops::{Deref, DerefMut},
-  rc::Rc,
-};
+use std::{cell::RefCell,
+          ops::{Deref, DerefMut},
+          rc::Rc};
 
 /// Resources are wrapped in this type.
 #[derive(Debug)]
