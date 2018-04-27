@@ -14,8 +14,8 @@ where F: Fn(&Path) -> B {
   tmp_dir.close().expect("close the temporary directory");
 }
 
-pub fn with_store<F, B>(f: F)
-where F: Fn(warmy::Store) -> B {
+pub fn with_store<F, B, C>(f: F)
+where F: Fn(warmy::Store<C>) -> B {
   with_tmp_dir(|tmp_dir| {
     let opt = warmy::StoreOpt::default()
       .set_root(tmp_dir.to_owned())
