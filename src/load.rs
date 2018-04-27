@@ -12,26 +12,36 @@ use std::{collections::HashMap,
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
 
-pub trait Load: 'static + Sized {
+pub trait Load<C>: 'static + Sized {
   /// Type of the key used to load the resource.
-  type Key: key::Key;
+  type Key: key::Key + 'static;
 
   /// Type of error that might happen while loading.
-  type Error: Error;
+  type Error: Error + 'static;
 
   /// Load a resource.
   ///
   /// The `Store` can be used to load or declare additional resource dependencies.
   ///
   /// The result type is used to register for dependency events.
-  fn load(key: Self::Key, storage: &mut Storage) -> Result<Loaded<Self>, Self::Error>;
+  fn load(
+    key: Self::Key,
+    storage: &mut Storage<C>,
+    ctx: &mut C,
+  ) -> Result<Loaded<Self>, Self::Error>;
 
   // FIXME: add support for redeclaring the dependencies?
   /// Function called when a resource must be reloaded.
   ///
   /// The default implementation of that function calls `load` and returns its result.
-  fn reload(&self, key: Self::Key, storage: &mut Storage) -> Result<Self, Self::Error> {
-    Self::load(key, storage).map(|lr| lr.res)
+  fn reload(
+    &self,
+    key: Self::Key,
+    storage: &mut Storage<C>,
+    ctx: &mut C,
+  ) -> Result<Self, Self::Error>
+  {
+    Self::load(key, storage, ctx).map(|lr| lr.res)
   }
 }
 
@@ -70,14 +80,14 @@ impl<T> From<T> for Loaded<T> {
 }
 
 /// Metadata about a resource.
-struct ResMetaData {
+struct ResMetaData<C> {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Storage) -> Result<(), Box<Error>>>,
+  on_reload: Box<Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Error>>>,
 }
 
-impl ResMetaData {
+impl<C> ResMetaData<C> {
   fn new<F>(f: F) -> Self
-  where F: 'static + Fn(&mut Storage) -> Result<(), Box<Error>> {
+  where F: 'static + Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Error>> {
     ResMetaData {
       on_reload: Box::new(f),
     }
@@ -88,7 +98,7 @@ impl ResMetaData {
 ///
 /// This type is responsible of storing resources and giving functions to look them up and update
 /// them whenever needed.
-pub struct Storage {
+pub struct Storage<C> {
   // canonicalized root path (used for resources loaded from the file system)
   canon_root: PathBuf,
   // resource cache, containing all living resources
@@ -96,10 +106,10 @@ pub struct Storage {
   // dependencies, mapping a dependency to its dependent resources
   deps: HashMap<DepKey, Vec<DepKey>>,
   // contains all metadata on resources (reload functions)
-  metadata: HashMap<DepKey, ResMetaData>,
+  metadata: HashMap<DepKey, ResMetaData<C>>,
 }
 
-impl Storage {
+impl<C> Storage<C> {
   fn new(canon_root: PathBuf) -> Result<Self, StoreError> {
     Ok(Storage {
       canon_root,
@@ -125,7 +135,7 @@ impl Storage {
     deps: Vec<DepKey>,
   ) -> Result<Res<T>, StoreError>
   where
-    T: Load,
+    T: Load<C>,
     T::Key: Clone + hash::Hash + Into<DepKey>,
   {
     let dep_key = key.clone().into();
@@ -141,8 +151,8 @@ impl Storage {
     // create the metadata for the resource
     let res_ = res.clone();
     let key_ = key.clone();
-    let metadata = ResMetaData::new(move |storage| {
-      let reloaded = T::reload(&res_.borrow(), key_.clone(), storage);
+    let metadata = ResMetaData::new(move |storage, ctx| {
+      let reloaded = T::reload(&res_.borrow(), key_.clone(), storage, ctx);
 
       match reloaded {
         Ok(r) => {
@@ -176,9 +186,9 @@ impl Storage {
   }
 
   /// Get a resource from the `Storage` and return an error if loading failed.
-  pub fn get<K, T>(&mut self, key: &K) -> Result<Res<T>, StoreErrorOr<T>>
+  pub fn get<K, T>(&mut self, key: &K, ctx: &mut C) -> Result<Res<T>, StoreErrorOr<T, C>>
   where
-    T: Load,
+    T: Load<C>,
     K: Clone + Into<T::Key>, {
     let key_ = key.clone().into().prepare_key(self.root());
     let dep_key = key_.clone().into();
@@ -189,7 +199,7 @@ impl Storage {
     match x {
       Some(resource) => Ok(resource),
       None => {
-        let loaded = T::load(key_.clone(), self).map_err(StoreErrorOr::ResError)?;
+        let loaded = T::load(key_.clone(), self, ctx).map_err(StoreErrorOr::ResError)?;
         self
           .inject(key_, loaded.res, loaded.deps)
           .map_err(StoreErrorOr::StoreError)
@@ -199,13 +209,19 @@ impl Storage {
 
   /// Get a resource from the `Storage` for the given key. If it fails, a proxied version is used,
   /// which will get replaced by the resource once it’s available and reloaded.
-  pub fn get_proxied<K, T, P>(&mut self, key: &K, proxy: P) -> Result<Res<T>, StoreError>
+  pub fn get_proxied<K, T, P>(
+    &mut self,
+    key: &K,
+    proxy: P,
+    ctx: &mut C,
+  ) -> Result<Res<T>, StoreError>
   where
-    T: Load,
+    T: Load<C>,
     K: Clone + Into<T::Key>,
-    P: FnOnce() -> T, {
+    P: FnOnce() -> T,
+  {
     self
-      .get(key)
+      .get(key, ctx)
       .or_else(|_| self.inject(key.clone().into(), proxy(), Vec::new()))
   }
 }
@@ -238,17 +254,17 @@ impl Error for StoreError {
 }
 
 /// Either a store error or a resource loading error.
-pub enum StoreErrorOr<T>
-where T: Load {
+pub enum StoreErrorOr<T, C>
+where T: Load<C> {
   /// A store error.
   StoreError(StoreError),
   /// A resource error.
   ResError(T::Error),
 }
 
-impl<T> Clone for StoreErrorOr<T>
+impl<T, C> Clone for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: Clone,
 {
   fn clone(&self) -> Self {
@@ -259,16 +275,16 @@ where
   }
 }
 
-impl<T> Eq for StoreErrorOr<T>
+impl<T, C> Eq for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: Eq,
 {
 }
 
-impl<T> PartialEq for StoreErrorOr<T>
+impl<T, C> PartialEq for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: PartialEq,
 {
   fn eq(&self, rhs: &Self) -> bool {
@@ -280,9 +296,9 @@ where
   }
 }
 
-impl<T> fmt::Debug for StoreErrorOr<T>
+impl<T, C> fmt::Debug for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: fmt::Debug,
 {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -293,9 +309,9 @@ where
   }
 }
 
-impl<T> fmt::Display for StoreErrorOr<T>
+impl<T, C> fmt::Display for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: fmt::Debug,
 {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -303,9 +319,9 @@ where
   }
 }
 
-impl<T> Error for StoreErrorOr<T>
+impl<T, C> Error for StoreErrorOr<T, C>
 where
-  T: Load,
+  T: Load<C>,
   T::Error: fmt::Debug,
 {
   fn description(&self) -> &str {
@@ -357,7 +373,7 @@ impl Synchronizer {
   }
 
   /// Dequeue any file system events.
-  fn dequeue_fs_events(&mut self, storage: &Storage) {
+  fn dequeue_fs_events<C>(&mut self, storage: &Storage<C>) {
     for event in self.watcher_rx.try_iter() {
       match event {
         RawEvent {
@@ -379,7 +395,7 @@ impl Synchronizer {
   }
 
   /// Reload any dirty resource that fulfill its time predicate.
-  fn reload_dirties(&mut self, storage: &mut Storage) {
+  fn reload_dirties<C>(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     let update_await_time_ms = self.update_await_time_ms;
 
     self.dirties.retain(|dep_key, dirty_instant| {
@@ -389,14 +405,14 @@ impl Synchronizer {
       if now.duration_since(dirty_instant.clone()) >= Duration::from_millis(update_await_time_ms) {
         // we’ve waited enough; reload
         if let Some(metadata) = storage.metadata.remove(&dep_key) {
-          if (metadata.on_reload)(storage).is_ok() {
+          if (metadata.on_reload)(storage, ctx).is_ok() {
             // if we have successfully reloaded the resource, notify the observers that this
             // dependency has changed
             if let Some(deps) = storage.deps.get(&dep_key).cloned() {
               for dep in deps {
                 if let Some(obs_metadata) = storage.metadata.remove(&dep) {
                   // FIXME: decide what to do with the result (error?)
-                  let _ = (obs_metadata.on_reload)(storage);
+                  let _ = (obs_metadata.on_reload)(storage, ctx);
 
                   // reinject the dependency once afterwards
                   storage.metadata.insert(dep, obs_metadata);
@@ -416,19 +432,19 @@ impl Synchronizer {
   }
 
   /// Synchronize the `Storage` by updating the resources that ought to.
-  fn sync(&mut self, storage: &mut Storage) {
+  fn sync<C>(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     self.dequeue_fs_events(storage);
-    self.reload_dirties(storage);
+    self.reload_dirties(storage, ctx);
   }
 }
 
 /// Resource store. Responsible for holding and presenting resources.
-pub struct Store {
-  storage: Storage,
+pub struct Store<C> {
+  storage: Storage<C>,
   synchronizer: Synchronizer,
 }
 
-impl Store {
+impl<C> Store<C> {
   /// Create a new store.
   ///
   /// The `root` represents the root directory from all the resources come from and is relative to
@@ -462,20 +478,20 @@ impl Store {
   }
 
   /// Synchronize the `Store` by updating the resources that ought to.
-  pub fn sync(&mut self) {
-    self.synchronizer.sync(&mut self.storage);
+  pub fn sync(&mut self, ctx: &mut C) {
+    self.synchronizer.sync(&mut self.storage, ctx);
   }
 }
 
-impl Deref for Store {
-  type Target = Storage;
+impl<C> Deref for Store<C> {
+  type Target = Storage<C>;
 
   fn deref(&self) -> &Self::Target {
     &self.storage
   }
 }
 
-impl DerefMut for Store {
+impl<C> DerefMut for Store<C> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.storage
   }

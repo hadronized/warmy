@@ -1,5 +1,4 @@
-use std::{cell::RefCell,
-          ops::{Deref, DerefMut},
+use std::{cell::{Ref, RefCell, RefMut},
           rc::Rc};
 
 /// Resources are wrapped in this type.
@@ -16,18 +15,12 @@ impl<T> Res<T> {
   pub fn new(t: T) -> Self {
     Res(Rc::new(RefCell::new(t)))
   }
-}
 
-impl<T> Deref for Res<T> {
-  type Target = Rc<RefCell<T>>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
+  pub fn borrow(&self) -> Ref<T> {
+    self.0.borrow()
   }
-}
 
-impl<T> DerefMut for Res<T> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
+  pub fn borrow_mut(&self) -> RefMut<T> {
+    self.0.borrow_mut()
   }
 }
