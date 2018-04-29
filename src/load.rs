@@ -111,13 +111,13 @@ pub struct Storage<C> {
 }
 
 impl<C> Storage<C> {
-  fn new(canon_root: PathBuf) -> Result<Self, StoreError> {
-    Ok(Storage {
+  fn new(canon_root: PathBuf) -> Self {
+    Storage {
       canon_root,
       cache: HashCache::new(),
       deps: HashMap::new(),
       metadata: HashMap::new(),
-    })
+    }
   }
 
   /// The canonicalized root the `Storage` is configured with.
@@ -496,7 +496,7 @@ impl<C> Store<C> {
     let _ = watcher.watch(&canon_root, RecursiveMode::Recursive);
 
     // create the storage
-    let storage = Storage::new(canon_root)?;
+    let storage = Storage::new(canon_root);
 
     // create the synchronizer
     let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms);
