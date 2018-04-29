@@ -1,3 +1,7 @@
+//! Load and reload resources.
+//!
+//! This module exposes traits, types and functions you need to use to load and reload objects.
+
 use any_cache::{Cache, HashCache};
 use notify::{op::WRITE, raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashMap;
@@ -12,6 +16,13 @@ use std::time::{Duration, Instant};
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
 
+/// Class of types that can be loaded and reloaded.
+///
+/// The first type variable, `C`, represents the context of the loading. This will be accessed via
+/// a mutable reference when loading and reloading.
+///
+/// The second type variable, `Method`, is a tag-only value that is useful to implement several
+/// algorithms to load the same type with different methods.
 pub trait Load<C, Method = ()>: 'static + Sized
 where Method: ?Sized {
   /// Type of the key used to load the resource.
@@ -22,9 +33,10 @@ where Method: ?Sized {
 
   /// Load a resource.
   ///
-  /// The `Store` can be used to load or declare additional resource dependencies.
+  /// The `Storage` can be used to load additional resource dependencies.
   ///
-  /// The result type is used to register for dependency events.
+  /// The result type is used to register for dependency events. If you do not need any, you can
+  /// lift your return value in `Loaded<_>` with `your_value.into()`.
   fn load(
     key: Self::Key,
     storage: &mut Storage<C>,
@@ -97,7 +109,7 @@ impl<C> ResMetaData<C> {
 
 /// Resource storage.
 ///
-/// This type is responsible of storing resources and giving functions to look them up and update
+/// This type is responsible for storing resources, giving functions to look them up and update
 /// them whenever needed.
 pub struct Storage<C> {
   // canonicalized root path (used for resources loaded from the file system)
@@ -186,7 +198,9 @@ impl<C> Storage<C> {
     Ok(res)
   }
 
-  /// Get a resource from the `Storage` and return an error if loading failed.
+  /// Get a resource from the `Storage` and return an error if its loading failed.
+  ///
+  /// This function uses the default loading method.
   pub fn get<K, T>(&mut self, key: &K, ctx: &mut C) -> Result<Res<T>, StoreErrorOr<T, C>>
   where
     T: Load<C>,
@@ -194,6 +208,8 @@ impl<C> Storage<C> {
     self.get_by(key, ctx, ())
   }
 
+  /// Get a resource from the `Storage` by using a specific method and return and error if its
+  /// loading failed.
   pub fn get_by<K, T, M>(
     &mut self,
     key: &K,
@@ -224,6 +240,8 @@ impl<C> Storage<C> {
 
   /// Get a resource from the `Storage` for the given key. If it fails, a proxied version is used,
   /// which will get replaced by the resource once it’s available and reloaded.
+  ///
+  /// This function uses the default loading method.
   pub fn get_proxied<K, T, P>(
     &mut self,
     key: &K,
@@ -240,6 +258,9 @@ impl<C> Storage<C> {
       .or_else(|_| self.inject::<T, ()>(key.clone().into(), proxy(), Vec::new()))
   }
 
+  /// Get a resource from the `Storage` for the given key by using a specific method. If it fails, a
+  /// proxied version is used, which will get replaced by the resource once it’s available and
+  /// reloaded.
   pub fn get_proxied_by<K, T, M, P>(
     &mut self,
     key: &K,
@@ -258,10 +279,10 @@ impl<C> Storage<C> {
   }
 }
 
-/// Error that might happen when creating a resource store.
+/// Error that might happen when handling a resource store around.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoreError {
-  /// The root path for the resources was not found.
+  /// The root path for a filesystem resource was not found.
   RootDoesDotExit(PathBuf),
   /// The key associated with a resource already exists in the `Store`.
   ///
@@ -479,8 +500,10 @@ pub struct Store<C> {
 impl<C> Store<C> {
   /// Create a new store.
   ///
-  /// The `root` represents the root directory from all the resources come from and is relative to
-  /// the binary’s location by default (unless you specify it as absolute).
+  /// # Failures
+  ///
+  /// This function will fail if the root path in the `StoreOpt` doesn’t resolve to a correct
+  /// canonicalized path.
   pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
     let root = &opt.root;
@@ -509,7 +532,7 @@ impl<C> Store<C> {
     Ok(store)
   }
 
-  /// Synchronize the `Store` by updating the resources that ought to.
+  /// Synchronize the `Store` by updating the resources that ought to with a provided context.
   pub fn sync(&mut self, ctx: &mut C) {
     self.synchronizer.sync(&mut self.storage, ctx);
   }
@@ -530,6 +553,8 @@ impl<C> DerefMut for Store<C> {
 }
 
 /// Various options to customize a `Store`.
+///
+/// Feel free to inspect all of its declared methods for further information.
 pub struct StoreOpt {
   root: PathBuf,
   update_await_time_ms: u64,
@@ -547,6 +572,10 @@ impl Default for StoreOpt {
 impl StoreOpt {
   /// Change the update await time (milliseconds) used to determine whether a resource should be
   /// reloaded or not.
+  ///
+  /// A `Store` will wait that amount of time before deciding an resource should be reloaded after
+  /// it has changed on the filesystem. That is required in order to cope with write streaming, that
+  /// generates a lot of write event.
   ///
   /// # Default
   ///

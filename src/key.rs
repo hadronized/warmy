@@ -1,3 +1,11 @@
+//! Module exporting all key types recognized by `warmy`.
+//!
+//! This module provides you with three main types:
+//!
+//!   - `FSKey`:
+//!   - `LogicalKey`.
+//!   - `DeyKep`.
+
 use any_cache::CacheKey;
 use std::hash;
 use std::marker::PhantomData;
@@ -5,21 +13,30 @@ use std::path::{Component, Path, PathBuf};
 
 use res::Res;
 
+/// A dependency key, used to express dependency.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum DepKey {
+  /// A key to a resource living on the filesystem – akin to `FSKey`.
   Path(PathBuf),
+  /// A key to a resource living in memory or computed on the fly – akin to `LogicalKey`.
   Logical(String),
 }
 
+/// Filesystem key.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct FSKey(PathBuf);
 
 impl FSKey {
+  /// Create a new `FSKey` by providing a VFS path.
+  ///
+  /// The VFS path should start with a leading `"/"` (yet it’s not enforced). This VFS path will
+  /// get transformed by a `Store` when used by inspecting the `Store`’s root.
   pub fn new<P>(path: P) -> Self
   where P: AsRef<Path> {
     FSKey(path.as_ref().to_owned())
   }
 
+  /// Get the underlying path.
   pub fn as_path(&self) -> &Path {
     self.0.as_path()
   }
@@ -31,15 +48,18 @@ impl From<FSKey> for DepKey {
   }
 }
 
+/// Logical or memory key.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct LogicalKey(String);
 
 impl LogicalKey {
+  /// Create a new `LogicalKey` by prodiving a string of data.
   pub fn new<S>(s: S) -> Self
   where S: AsRef<str> {
     LogicalKey(s.as_ref().to_owned())
   }
 
+  /// Get the data the key holds.
   pub fn as_str(&self) -> &str {
     &self.0
   }
@@ -51,7 +71,17 @@ impl From<LogicalKey> for DepKey {
   }
 }
 
+/// Class of keys recognized by `warmy`.
 pub trait Key: Clone + hash::Hash + Into<DepKey> {
+  /// Prepare a key.
+  ///
+  /// If your key is akin to `FSKey`, it’s very likely you need to substitute its VFS path with the
+  /// `root` argument. It’s advised to use the `prepare_key` method for your inner key value.
+  ///
+  /// > General note: you shouldn’t have to worry about implementing this trait as the interface
+  /// > will often use any type of key that implements `Into<K> where K: Key` – for instance,
+  /// > `FSKey`. You’re **strongly advised** to implement `From<YourKey> for FSKey` instead, unless
+  /// > you know exactly what you’re doing.
   fn prepare_key(self, root: &Path) -> Self;
 }
 
