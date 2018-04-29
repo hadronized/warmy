@@ -1,7 +1,7 @@
 use any_cache::CacheKey;
-use std::{hash,
-          marker::PhantomData,
-          path::{Component, Path, PathBuf}};
+use std::hash;
+use std::marker::PhantomData;
+use std::path::{Component, Path, PathBuf};
 
 use res::Res;
 

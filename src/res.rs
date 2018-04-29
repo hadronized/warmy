@@ -1,5 +1,5 @@
-use std::{cell::{Ref, RefCell, RefMut},
-          rc::Rc};
+use std::cell::{Ref, RefCell, RefMut};
+use std::rc::Rc;
 
 /// Resources are wrapped in this type.
 #[derive(Debug)]

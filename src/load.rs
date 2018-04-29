@@ -1,13 +1,13 @@
 use any_cache::{Cache, HashCache};
 use notify::{op::WRITE, raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use std::{collections::HashMap,
-          error::Error,
-          fmt,
-          hash,
-          ops::{Deref, DerefMut},
-          path::{Path, PathBuf},
-          sync::mpsc::{channel, Receiver},
-          time::{Duration, Instant}};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fmt;
+use std::hash;
+use std::ops::{Deref, DerefMut};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{channel, Receiver};
+use std::time::{Duration, Instant};
 
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
