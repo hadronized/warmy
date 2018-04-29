@@ -12,7 +12,8 @@ use std::time::{Duration, Instant};
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
 
-pub trait Load<C>: 'static + Sized {
+pub trait Load<C, Method = ()>: 'static + Sized
+where Method: ?Sized {
   /// Type of the key used to load the resource.
   type Key: key::Key + 'static;
 
@@ -128,14 +129,14 @@ impl<C> Storage<C> {
   ///
   /// The resource might be refused for several reasons. Further information in the documentation of
   /// the `StoreError` error type.
-  fn inject<T>(
+  fn inject<T, M>(
     &mut self,
     key: T::Key,
     resource: T,
     deps: Vec<DepKey>,
   ) -> Result<Res<T>, StoreError>
   where
-    T: Load<C>,
+    T: Load<C, M>,
     T::Key: Clone + hash::Hash + Into<DepKey>,
   {
     let dep_key = key.clone().into();
@@ -152,7 +153,7 @@ impl<C> Storage<C> {
     let res_ = res.clone();
     let key_ = key.clone();
     let metadata = ResMetaData::new(move |storage, ctx| {
-      let reloaded = T::reload(&res_.borrow(), key_.clone(), storage, ctx);
+      let reloaded = <T as Load<C, M>>::reload(&res_.borrow(), key_.clone(), storage, ctx);
 
       match reloaded {
         Ok(r) => {
@@ -190,6 +191,19 @@ impl<C> Storage<C> {
   where
     T: Load<C>,
     K: Clone + Into<T::Key>, {
+    self.get_by(key, ctx, ())
+  }
+
+  pub fn get_by<K, T, M>(
+    &mut self,
+    key: &K,
+    ctx: &mut C,
+    _: M,
+  ) -> Result<Res<T>, StoreErrorOr<T, C, M>>
+  where
+    T: Load<C, M>,
+    K: Clone + Into<T::Key>,
+  {
     let key_ = key.clone().into().prepare_key(self.root());
     let dep_key = key_.clone().into();
     let pkey = PrivateKey::<T>::new(dep_key);
@@ -199,9 +213,10 @@ impl<C> Storage<C> {
     match x {
       Some(resource) => Ok(resource),
       None => {
-        let loaded = T::load(key_.clone(), self, ctx).map_err(StoreErrorOr::ResError)?;
+        let loaded =
+          <T as Load<C, M>>::load(key_.clone(), self, ctx).map_err(StoreErrorOr::ResError)?;
         self
-          .inject(key_, loaded.res, loaded.deps)
+          .inject::<T, M>(key_, loaded.res, loaded.deps)
           .map_err(StoreErrorOr::StoreError)
       }
     }
@@ -222,7 +237,24 @@ impl<C> Storage<C> {
   {
     self
       .get(key, ctx)
-      .or_else(|_| self.inject(key.clone().into(), proxy(), Vec::new()))
+      .or_else(|_| self.inject::<T, ()>(key.clone().into(), proxy(), Vec::new()))
+  }
+
+  pub fn get_proxied_by<K, T, M, P>(
+    &mut self,
+    key: &K,
+    proxy: P,
+    ctx: &mut C,
+    method: M,
+  ) -> Result<Res<T>, StoreError>
+  where
+    T: Load<C, M>,
+    K: Clone + Into<T::Key>,
+    P: FnOnce() -> T,
+  {
+    self
+      .get_by(key, ctx, method)
+      .or_else(|_| self.inject::<T, M>(key.clone().into(), proxy(), Vec::new()))
   }
 }
 
@@ -254,17 +286,17 @@ impl Error for StoreError {
 }
 
 /// Either a store error or a resource loading error.
-pub enum StoreErrorOr<T, C>
-where T: Load<C> {
+pub enum StoreErrorOr<T, C, M = ()>
+where T: Load<C, M> {
   /// A store error.
   StoreError(StoreError),
   /// A resource error.
   ResError(T::Error),
 }
 
-impl<T, C> Clone for StoreErrorOr<T, C>
+impl<T, C, M> Clone for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: Clone,
 {
   fn clone(&self) -> Self {
@@ -275,16 +307,16 @@ where
   }
 }
 
-impl<T, C> Eq for StoreErrorOr<T, C>
+impl<T, C, M> Eq for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: Eq,
 {
 }
 
-impl<T, C> PartialEq for StoreErrorOr<T, C>
+impl<T, C, M> PartialEq for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: PartialEq,
 {
   fn eq(&self, rhs: &Self) -> bool {
@@ -296,9 +328,9 @@ where
   }
 }
 
-impl<T, C> fmt::Debug for StoreErrorOr<T, C>
+impl<T, C, M> fmt::Debug for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: fmt::Debug,
 {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -309,9 +341,9 @@ where
   }
 }
 
-impl<T, C> fmt::Display for StoreErrorOr<T, C>
+impl<T, C, M> fmt::Display for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: fmt::Debug,
 {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -319,9 +351,9 @@ where
   }
 }
 
-impl<T, C> Error for StoreErrorOr<T, C>
+impl<T, C, M> Error for StoreErrorOr<T, C, M>
 where
-  T: Load<C>,
+  T: Load<C, M>,
   T::Error: fmt::Debug,
 {
   fn description(&self) -> &str {
