@@ -50,6 +50,22 @@ impl<C> Load<C> for Foo {
   }
 }
 
+struct Stupid;
+
+// a tricky version that doesn’t actually read the file but return something constant… it’s stupid,
+// but it’s there to test methods
+impl<C> Load<C, Stupid> for Foo {
+  type Key = FSKey;
+
+  type Error = FooErr;
+
+  fn load(_: Self::Key, _: &mut Storage<C>, _: &mut C) -> Result<Loaded<Self>, Self::Error> {
+    eprintln!("hello");
+    let foo = Foo("stupid".to_owned());
+    Ok(foo.into())
+  }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 struct Bar(String);
 
@@ -342,7 +358,7 @@ impl Load<Ctx> for FooWithCtx {
   ) -> Result<Loaded<Self>, Self::Error>
   {
     // load as if it was a Foo
-    let Loaded { res, deps } = Foo::load(key, storage, ctx)?;
+    let Loaded { res, deps } = <Foo as Load<_, ()>>::load(key, storage, ctx)?;
 
     // increment the counter
     ctx.count += 1;
@@ -396,5 +412,27 @@ fn foo_with_ctx() {
     }
 
     assert_eq!(ctx.count, 2);
+  })
+}
+
+#[test]
+fn foo_by_stupid() {
+  utils::with_store(|mut store: Store<()>| {
+    let ctx = &mut ();
+    let expected = "stupid";
+
+    let key = FSKey::new("foo.txt");
+    let path = store.root().join("foo.txt");
+
+    {
+      let mut fh = File::create(&path).unwrap();
+      let _ = fh.write_all(&b"Hello, world!"[..]);
+    }
+
+    let r: Res<Foo> = store
+      .get_by(&key, ctx, Stupid)
+      .expect("object should be present at the given key");
+
+    assert_eq!(&r.borrow().0, expected);
   })
 }
