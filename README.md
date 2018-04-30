@@ -1,6 +1,7 @@
 # warmy, hot-reloading loadable and reloadable resources
 
 [![Build Status](https://travis-ci.org/phaazon/warmy.svg?branch=master)](https://travis-ci.org/phaazon/warmy)
+[![dependency status](https://deps.rs/repo/github/phaazon/warmy/status.svg)](https://deps.rs/repo/github/phaazon/warmy)
 [![crates.io](https://img.shields.io/crates/v/warmy.svg)](https://crates.io/crates/warmy)
 [![docs.rs](https://docs.rs/warmy/badge.svg)](https://docs.rs/warmy)
 ![License](https://img.shields.io/badge/license-BSD3-blue.svg?style=flat)
