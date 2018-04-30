@@ -33,7 +33,8 @@
 
 > A gigantic **thank you** to [@icefoxen](https://github.com/icefoxen) for all their contributions
 > to the crate, especially the context passing feature (it was their idea!) and all the testing they
-> have done – `warmy` might get into [ggez](https://crates.io/crates/ggez), how cool is that!
+> have done – `warmy` was tested with success with [ggez](https://crates.io/crates/ggez); how cool
+> is that!
 
 ## 0.6.1
 
