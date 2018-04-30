@@ -1,3 +1,28 @@
+# 0.7
+
+> Monday, April, 30th 2018
+
+- Refactored and reworked all the key system. The new system implements a
+  [VFS](https://en.wikipedia.org/wiki/Virtual_file_system) and is easier to use – among important
+  changes: the functional dependency between a key and the resource it points to was removed and is
+  now injected by the implementation.
+- Added a `rustfmt.toml` file to the project. This is an experiment only to see whether it makes it
+  easier to collaborate.
+- Added context passing. That enables situations where a mutable reference can be passed to a
+  loading or even reloading resource, allowing for several interesting situations (loading /
+  reloading statistics, tuning, etc.).
+- Added loading and reloading methods. Those are tag-only type variables that can be used to
+  implement `Load` several times for a same type `T`, giving it the possibility to load or reload
+  via several algorithms (JSON, YAML, custom, etc.).
+- Complete rewrite of the documentation. The documentation index (at the crate level) now contains
+  a pretty detailed and as exhaustive as possible about **warmy** and everything that can be done
+  with it. (hint: if you’re a developer and state that something is missing, please open an issue or
+  even better, please open a merge request if you have spare time!).
+
+> A gigantic **thank you** to [@icefoxen](https://github.com/icefoxen) for all their contributions
+> to the crate, especially the context passing feature (it was their idea!) and all the testing they
+> have done – `warmy` might get into [ggez](https://crates.io/crates/ggez), how cool is that!
+
 ## 0.6.1
 
 > Saturday, April, 7th 2018
