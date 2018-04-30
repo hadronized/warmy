@@ -7,6 +7,6 @@
 
 warmy is a crate that helps you introduce hot-reloading in your software.
 
-The crate has [an embedded tutorial](https://docs.rs/warmy/warmy) in its documentation that
+The crate has [an embedded tutorial](https://docs.rs/warmy) in its documentation that
 will provide you with enough details to both understand what **warmy** is about and how you’re
 supposed to use it.

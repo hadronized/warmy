@@ -2,6 +2,12 @@
 
 > Monday, April, 30th 2018
 
+- Fixed a typo in the README.md. (am I drunk or what?)
+
+## 0.7.1
+
+> Monday, April, 30th 2018
+
 - Fixed a typo in the README.md.
 
 # 0.7
