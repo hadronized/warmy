@@ -6,11 +6,16 @@ authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
 description = "Hot-reloading loadable and reloadable resources"
 keywords = ["hot-reloading", "resources"]
 categories = ["caching", "filesystem"]
-
 homepage = "https://github.com/phaazon/warmy"
 repository = "https://github.com/phaazon/warmy"
 documentation = "https://docs.rs/warmy"
 readme = "README.md"
+
+[badges]
+travis-ci = { repository = "phaazon/warmy", branch = "master" }
+is-it-maintained-issue-resolution = { repository = "phaazon/warmy" }
+is-it-maintained-open-issues = { repository = "phaazon/warmy" }
+maintenance = { status = "actively-developed" }
 
 [dependencies]
 any-cache = "0.2"
