@@ -5,6 +5,7 @@ license = "BSD-3-Clause"
 authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
 description = "Hot-reloading loadable and reloadable resources"
 keywords = ["hot-reloading", "resources"]
+categories = ["caching", "filesystem"]
 
 homepage = "https://github.com/phaazon/warmy"
 repository = "https://github.com/phaazon/warmy"
