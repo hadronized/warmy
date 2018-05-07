@@ -369,13 +369,17 @@
 //! [VFS]: https://en.wikipedia.org/wiki/Virtual_file_system
 
 extern crate any_cache;
+extern crate futures;
 extern crate notify;
 
+pub mod async;
 pub mod key;
 pub mod load;
 pub mod methods;
 pub mod res;
+pub mod store_opt;
 
 pub use key::{DepKey, FSKey, Key, LogicalKey};
-pub use load::{Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
+pub use load::{Load, Loaded, Storage, Store, StoreError, StoreErrorOr};
 pub use res::Res;
+pub use store_opt::StoreOpt;

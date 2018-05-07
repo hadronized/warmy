@@ -11,7 +11,7 @@ use std::hash;
 use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
-use res::Res;
+use res::{AsyncRes, Res};
 
 /// A dependency key, used to express dependency.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -140,4 +140,25 @@ impl<T> CacheKey for PrivateKey<T>
 where T: 'static
 {
   type Target = Res<T>;
+}
+
+pub(crate) struct AsyncPrivateKey<T>(DepKey, PhantomData<T>);
+
+impl<T> AsyncPrivateKey<T> {
+  pub(crate) fn new(dep_key: DepKey) -> Self {
+    AsyncPrivateKey(dep_key, PhantomData)
+  }
+}
+
+impl<T> hash::Hash for AsyncPrivateKey<T> {
+  fn hash<H>(&self, state: &mut H)
+  where H: hash::Hasher {
+    self.0.hash(state)
+  }
+}
+
+impl<T> CacheKey for AsyncPrivateKey<T>
+where T: 'static
+{
+  type Target = AsyncRes<T>;
 }

@@ -19,6 +19,7 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 any-cache = "0.2"
+futures = "0.2"
 notify = "4.0.3"
 
 [dev-dependencies]

@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
+use store_opt::StoreOpt;
 
 /// Class of types that can be loaded and reloaded.
 ///
@@ -506,7 +507,7 @@ impl<C> Store<C> {
   /// canonicalized path.
   pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
-    let root = &opt.root;
+    let root = opt.root();
     let canon_root = root
       .canonicalize()
       .map_err(|_| StoreError::RootDoesDotExit(root.to_owned()))?;
@@ -522,7 +523,7 @@ impl<C> Store<C> {
     let storage = Storage::new(canon_root);
 
     // create the synchronizer
-    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms);
+    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms());
 
     let store = Store {
       storage,
@@ -549,68 +550,5 @@ impl<C> Deref for Store<C> {
 impl<C> DerefMut for Store<C> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.storage
-  }
-}
-
-/// Various options to customize a `Store`.
-///
-/// Feel free to inspect all of its declared methods for further information.
-pub struct StoreOpt {
-  root: PathBuf,
-  update_await_time_ms: u64,
-}
-
-impl Default for StoreOpt {
-  fn default() -> Self {
-    StoreOpt {
-      root: PathBuf::from("."),
-      update_await_time_ms: 50,
-    }
-  }
-}
-
-impl StoreOpt {
-  /// Change the update await time (milliseconds) used to determine whether a resource should be
-  /// reloaded or not.
-  ///
-  /// A `Store` will wait that amount of time before deciding an resource should be reloaded after
-  /// it has changed on the filesystem. That is required in order to cope with write streaming, that
-  /// generates a lot of write event.
-  ///
-  /// # Default
-  ///
-  /// Defaults to `50` milliseconds.
-  #[inline]
-  pub fn set_update_await_time_ms(self, ms: u64) -> Self {
-    StoreOpt {
-      update_await_time_ms: ms,
-      ..self
-    }
-  }
-
-  /// Get the update await time (milliseconds).
-  #[inline]
-  pub fn update_await_time_ms(&self) -> u64 {
-    self.update_await_time_ms
-  }
-
-  /// Change the root directory from which the `Store` will be watching file changes.
-  ///
-  /// # Default
-  ///
-  /// Defaults to `"."`.
-  #[inline]
-  pub fn set_root<P>(self, root: P) -> Self
-  where P: AsRef<Path> {
-    StoreOpt {
-      root: root.as_ref().to_owned(),
-      ..self
-    }
-  }
-
-  /// Get root directory.
-  #[inline]
-  pub fn root(&self) -> &Path {
-    &self.root
   }
 }
