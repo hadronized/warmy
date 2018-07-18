@@ -291,9 +291,9 @@
 //!
 //! # Context
 //!
-//! A context is a special value you can access to via a mutable references when loading or
+//! A context is a special value you can access to via a mutable reference when loading or
 //! reloading. If you don’t need any, it’s highly recommended not to use `()` when implementing
-//! `Load<C>` but leave it as polymorphic value so that it composes better – i.e. `impl<C> Load<C>`.
+//! `Load<C>` but leave it as type variable so that it compose better – i.e. `impl<C> Load<C>`.
 //!
 //! If you’re writing a library and need to have access to a specific value in a context, it’s also
 //! recommended not to set the context type variable to the type of your context directly. If you do
