@@ -297,12 +297,14 @@
 //!
 //! If you’re writing a library and need to have access to a specific value in a context, it’s also
 //! recommended not to set the context type variable to the type of your context directly. If you do
-//! that, no one will be able to use your library because types won’t match. A typical way to deal
-//! with that is by constraining a polymorphic type variable. For instance:
+//! that, no one will be able to use your library because types won’t match – or people will accept
+//! to be restrained to your only types. A typical way to deal with that is by constraining a
+//! polymorphic type variable. The [`Inspect`] trait was introduced for this very purpose. For
+//! instance:
 //!
 //! ```
 //! use std::io;
-//! use warmy::{Load, Loaded, LogicalKey, Storage};
+//! use warmy::{Inspect, Load, Loaded, LogicalKey, Storage};
 //!
 //! struct Foo;
 //!
@@ -310,17 +312,7 @@
 //!   nb_res_loaded: usize
 //! }
 //!
-//! trait HasCtx {
-//!   fn get_ctx(&mut self) -> &mut Ctx;
-//! }
-//!
-//! impl HasCtx for Ctx {
-//!   fn get_ctx(&mut self) -> &mut Ctx {
-//!     self
-//!   }
-//! }
-//!
-//! impl<C> Load<C> for Foo where C: HasCtx {
+//! impl<C> Load<C> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
 //!   type Key = LogicalKey;
 //!
 //!   type Error = io::Error; // should be the never type, !, but not stable yet
@@ -330,10 +322,19 @@
 //!     storage: &mut Storage<C>,
 //!     ctx: &mut C
 //!   ) -> Result<Loaded<Self>, Self::Error> {
-//!     ctx.get_ctx().nb_res_loaded += 1;
+//!     Self::inspect(ctx).nb_res_loaded += 1; // magic happens here!
 //!
 //!     Ok(Foo.into())
 //!   }
+//! }
+//!
+//! fn main() {
+//!   use warmy::{Res, Store, StoreOpt};
+//!
+//!   let mut store: Store<Ctx> = Store::new(StoreOpt::default()).unwrap();
+//!   let mut ctx = Ctx { nb_res_loaded: 0 };
+//!
+//!   let r: Res<Foo> = store.get(&LogicalKey::new("test-0"), &mut ctx).unwrap();
 //! }
 //! ```
 //!
