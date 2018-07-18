@@ -22,21 +22,21 @@
 //! *Loading* is the action of getting an object out of a given location. That location is often
 //! your filesystem but it can also be a memory area – mapped files or memory parsing. In `warmy`,
 //! loading is implemented *per-type*: this means you have to implement a trait on a type so that
-//! any object of that type can be loaded. The trait to implement is [Load]. We’re interested in
+//! any object of that type can be loaded. The trait to implement is [`Load`]. We’re interested in
 //! four items:
 //!
-//!   - The [Store], which holds and caches resources.
-//!   - The [Load::Key] associated type, used to tell `warmy` which kind of resource your type
+//!   - The [`Store`], which holds and caches resources.
+//!   - The `Load::Key` associated type, used to tell `warmy` which kind of resource your type
 //!     represents and what information the key must contain.
-//!   - The [Load::Error] associated type, that is the error type used when loading fails.
-//!   - The [Load::load] method, which is the method called to load your resource in a given store.
+//!   - The `Load::Error` associated type, that is the error type used when loading fails.
+//!   - The `Load::load` method, which is the method called to load your resource in a given store.
 //!
-//! ## `Store`
+//! ## Store
 //!
-//! A [Store] is responsible for holding and caching resources. Each [Store] is associated with a
+//! A [`Store`] is responsible for holding and caching resources. Each [`Store`] is associated with a
 //! *root*, which is a path on the filesystem all filesystem resources will come from. You create a
-//! [Store] by giving it a [StoreOpt], which is used to customize the [Store] – if you don’t need
-//! it, use `Store::default()`.
+//! [`Store`] by giving it a [`StoreOpt`], which is used to customize the [`Store`] – if you don’t need
+//! it, use `Store::default`.
 //!
 //! ```
 //! use warmy::{Store, StoreOpt};
@@ -52,26 +52,26 @@
 //! }
 //! ```
 //!
-//! As you can see, the [Store] has a type variable. This type variable refers to the type of
+//! As you can see, the [`Store`] has a type variable. This type variable refers to the type of
 //! *context* you want to use with your resource. For now we’ll use `()` as we don’t want contexts,
 //! but more to come. Keep on reading.
 //!
 //! ## `Load::Key`
 //!
-//! This associated type must implement [Key], which is the class of types recognized as keys by
+//! This associated type must implement [`Key`], which is the class of types recognized as keys by
 //! `warmy`. In theory, you shouldn’t worry about that trait because `warmy` already ships with some
 //! key types.
 //!
-//! > If you really want to implement [Key], have a look at its documentation for further details.
+//! > If you really want to implement [`Key`], have a look at its documentation for further details.
 //!
 //! Keys are a core concept in `warmy` as they are objects that uniquely represent resources –
 //! should they be on a filesystem or in memory. You will refer to your resources with those keys.
 //!
 //! Let’s dig in some key types.
 //!
-//! ### The classic: `FSKey`, the filesystem key
+//! ### The classic: FSKey, the filesystem key
 //!
-//! [FSKey] is the type of key to choose if you want to refer to a resource on a filesystem. It’s
+//! [`FSKey`] is the type of key to choose if you want to refer to a resource on a filesystem. It’s
 //! very easy to build one:
 //!
 //! ```
@@ -80,14 +80,14 @@
 //! let my_key = FSKey::new("/foo/bar/zoo.json");
 //! ```
 //!
-//! The paths you use in [FSKey] are always relative to the store’s root, which implements some kind
+//! The paths you use in [`FSKey`] are always relative to the store’s root, which implements some kind
 //! of a [VFS] for those keys.
 //!
-//! > Note: if you don’t use the leading `'/'`, the [FSKey] is still considered as if it was
+//! > Note: if you don’t use the leading `'/'`, the [`FSKey`] is still considered as if it was
 //! > expressed with a leading `'/'`. Both `FSKey::new("/zulu.json")` and `FSKey::new("zulu.json")`
 //! > refer to the exact same resource.
 //!
-//! ### Flexibility: `LogicalKey`, the memory key
+//! ### Flexibility: LogicalKey, the memory key
 //!
 //! This type of key is a bit hard to wrap your finger around at first, because you might not need
 //! it. This type of key enables you to create unique identifiers for resources that do not
@@ -108,24 +108,24 @@
 //!
 //! ### Special case: dependency key
 //!
-//! A *dependency key* (a.k.a. [DepKey]) is a key used to express dependencies. Any type of key that
-//! implements [Key] also implements `Into<DepKey>`, which comes in handy when you want to build
+//! A *dependency key* (a.k.a. [`DepKey`]) is a key used to express dependencies. Any type of key that
+//! implements [`Key`] also implements `Into<DepKey>`, which comes in handy when you want to build
 //! heterogenous lists of dependency keys.
 //!
-//! [DepKey] is either akin to a [FSKey] or [LogicalKey].
+//! [`DepKey`] is either akin to a [`FSKey`] or [`LogicalKey`].
 //!
 //! ## `Load::Error`
 //!
 //! This associated type must be set to the type of error your loading implementation might
 //! generate. For instance, if you load something with [serde-json], you might want to set it to
-//! [serde_json::Error].
+//! °serde_json::Error`.
 //!
 //! > On a general note, you should always try to stick precise and accurate errors.Avoid simple
 //! > types such as `String` or `u64` and prefer to use detailed, algebraic datatypes.
 //!
-//! ## `Load::load`
+//! ## Load::load
 //!
-//! This is the entry-point method. [Load::load] must be implemented in order for `warmy` to know
+//! This is the entry-point method. `Load::load` must be implemented in order for `warmy` to know
 //! how to read the resource. Let’s implement it for two types: one that represents a resource on
 //! the filesystem, one computed from memory.
 //!
@@ -177,20 +177,20 @@
 //!
 //! As you can see here, there’re a few new concepts:
 //!
-//!   - [Loaded]: A type you have to wrap your object in to express dependencies. Because it
+//!   - [`Loaded`]: A type you have to wrap your object in to express dependencies. Because it
 //!     implements `From<T> for Loaded<T>`, you can use `.into()` to state you don’t have any
 //!     dependencies.
-//!   - [Storage]: This is the minimal structure that holds and caches your resources. A [Store] is
-//!     actually the *interface structure* you will handle in your client code.
+//!   - [`Storage`]: This is the minimal structure that holds and caches your resources. A [`Store`]
+//!     is actually the *interface structure* you will handle in your client code.
 //!
-//! ## Express your dependencies with `Loaded`
+//! ## Express your dependencies with Loaded
 //!
-//! An object of type [Loaded] gives information to `warmy` about your dependencies. Upon loading –
+//! An object of type [`Loaded`] gives information to `warmy` about your dependencies. Upon loading –
 //! i.e. your resource is successfully *loaded* – you can tell `warmy` which resources your loaded
 //! resource depends on. This is a bit tricky, though, because a diffference is important to make
 //! there.
 //!
-//! When you implement [Load::load], you are handed a [Storage]. You can use that [Storage] to load
+//! When you implement `Load::load`, you are handed a [`Storage`]. You can use that [`Storage`] to load
 //! additional resources and gather them in your resources. When those additional resources get
 //! reloaded, if you directly embed the resources in your object, you will automatically see the
 //! automated resources. However, if you don’t express a *dependency relationship* to those
@@ -200,35 +200,36 @@
 //!
 //!   1. You want to load an object that is represented by aggregation of several values /
 //!      resources.
-//!   2. You choose to use a *logical resource* and guess all the files to load from a [LogicalKey].
-//!   3. When you implement [Load::load], you open several files, load them into memory, compose
+//!   2. You choose to use a *logical resource* and guess all the files to load from a
+//!      [`LogicalKey`].
+//!   3. When you implement `Load::load`, you open several files, load them into memory, compose
 //!      them and finally end up with your object.
-//!   4. You return your object from [Load::load] with no dependencies (i.e. you use `.into()` on
+//!   4. You return your object from `Load::load` with no dependencies (i.e. you use `.into()` on
 //!      it).
 //!
 //! What is going to happen here is that if any of the files your resource depends on changes,
 //! since they don’t have a proper resource in the store, your object will see nothing. A typical
-//! solution there is to load those files as proper resources (by using [FSKey]) and put those
-//! keys in the returned [Loaded] object to express that you *depend on the reloading of the objects
-//! referred by these keys*. It’s a bit touchy but you will eventually find yourself in a situation
-//! when this [Loaded] thing will help you. You will then use `Loaded::with_deps`. See the
-//! documentation of [Loaded] for further information.
+//! solution there is to load those files as proper resources (by using [`FSKey`]) and put those
+//! keys in the returned [`Loaded`] object to express that you *depend on the reloading of the
+//! objects referred by these keys*. It’s a bit touchy but you will eventually find yourself in a
+//! situation when this [`Loaded`] thing will help you. You will then use `Loaded::with_deps`. See
+//! the documentation of [`Loaded`] for further information.
 //!
-//! > Fun fact: [LogicalKey] was introduced to solve that problem along with dependency graphs.
+//! > Fun fact: [`LogicalKey`] was introduced to solve that problem along with dependency graphs.
 //!
 //! ## Let’s get some things!
 //!
-//! When you have implemented [Load], you’re set and ready to get (cached) resources. You have
+//! When you have implemented [`Load`], you’re set and ready to get (cached) resources. You have
 //! several functions to achieve that goal:
 //!
-//!   - [Store::get], used to get a resource. This will effectively load it if it’s the first time
+//!   - `Store::get`, used to get a resource. This will effectively load it if it’s the first time
 //!     it’s asked. If it’s not, it will use a cached version.
-//!   - [Store::get_proxied], a special version of [Store::get]. If the initial loading (non-cached)
+//!   - `Store::get_proxied`, a special version of `Store::get`. If the initial loading (non-cached)
 //!     fails to load (missing resource, fail to parse, whatever), a *proxy* will be used – passed
-//!     in to [Store::get_proxied]. This value is lazy though, so if the loading succeeds, that
+//!     in to `Store::get_proxied`. This value is lazy though, so if the loading succeeds, that
 //!     value won’t ever be evaluated.
 //!
-//! Let’s focus on [Store::get] for this tutorial.
+//! Let’s focus on `Store::get` for this tutorial.
 //!
 //! ```
 //! use std::fs::File;
@@ -276,17 +277,17 @@
 //! Most of the interesting concept of `warmy` is to enable you to hot-reload resources without
 //! having to re-run your application. This is done via two items:
 //!
-//!   - [Load::reload], a method called whenever an object must be reloaded.
-//!   - [Store::sync], a method to synchronize a [Store] with the part of the filesystem it’s
+//!   - `Load::reload`, a method called whenever an object must be reloaded.
+//!   - `Store::sync`, a method to synchronize a [`Store`] with the part of the filesystem it’s
 //!     responsible for.
 //!
-//! The [Load::reload] function is very straight-forward: it’s called when the resource changes.
+//! The `Load::reload` function is very straight-forward: it’s called when the resource changes.
 //! This situation happens:
 //!
 //!   - Either when the resource is on the filesystem (the file changes).
 //!   - Or if it’s a dependent resource of one that has reloaded.
 //!
-//! See the documentation of [Load::reload] for further details.
+//! See the documentation of `Load::reload` for further details.
 //!
 //! # Context
 //!
@@ -339,30 +340,13 @@
 //! # Load methods
 //!
 //! `warmy` supports load methods. Those are used to specify several ways to load an object of a
-//! given type. By default, [Load] is implemented with the *default method* – which is `()`. If you
-//! want more methods, you can set the type parameter to something else when implementing [Load].
+//! given type. By default, [`Load`] is implemented with the *default method* – which is `()`. If you
+//! want more methods, you can set the type parameter to something else when implementing [`Load`].
 //!
 //! You can also find several [methods] centralized in here, but you definitely don’t have to use
 //! them. In theory, those will be removed and placed into other crates to add automatic
 //! implementations.
 //!
-//!
-//! [Load]: load/trait.Load.html
-//! [Loaded]: load/struct.Loaded.html
-//! [Load::Key]: load/trait.Load.html#associatedtype.Key
-//! [Load::Error]: load/trait.Load.html#associatedtype.Error
-//! [Load::load]: load/trait.Load.html#tymethod.load
-//! [Load::reload]: load/trait.Load.html#tymethod.reload
-//! [Key]: key/trait.Key.html
-//! [FSKey]: key/struct.FSKey.html
-//! [LogicalKey]: key/struct.LogicalKey.html
-//! [DepKey]: key/struct.DepKey.html
-//! [Store]: load/struct.Store.html
-//! [Store::get]: load/struct.Store.html#method.get
-//! [Store::get_proxied]: load/struct.Store.html#method.get_proxied
-//! [Store::sync]: load/struct.Store.html#method.sync
-//! [StoreOpt]: load/struct.StoreOpt.html
-//! [Storage]: load/struct.Storage.html
 //! [serde-json]: https://crates.io/crates/serde_json
 //! [serde_json::Error]: https://docs.serde.rs/serde_json/struct.Error.html
 //! [methods]: methods/index.html
@@ -371,11 +355,13 @@
 extern crate any_cache;
 extern crate notify;
 
+pub mod context;
 pub mod key;
 pub mod load;
 pub mod methods;
 pub mod res;
 
+pub use context::Inspect;
 pub use key::{DepKey, FSKey, Key, LogicalKey};
 pub use load::{Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
 pub use res::Res;
