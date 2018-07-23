@@ -299,7 +299,7 @@
 //! recommended not to set the context type variable to the type of your context directly. If you do
 //! that, no one will be able to use your library because types won’t match – or people will accept
 //! to be restrained to your only types. A typical way to deal with that is by constraining a
-//! polymorphic type variable. The [`Inspect`] trait was introduced for this very purpose. For
+//! type variable. The [`Inspect`] trait was introduced for this very purpose. For
 //! instance:
 //!
 //! ```
