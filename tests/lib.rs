@@ -408,16 +408,21 @@ impl<'a> Inspect<'a, Ctx, &'a mut u32> for Pew {
   }
 }
 
-impl<C> Load<C> for Pew where Self: for<'a> Inspect<'a, C, &'a mut u32> {
+impl<C> Load<C> for Pew
+where Self: for<'a> Inspect<'a, C, &'a mut u32>,
+      FooWithCtx: for<'a> Inspect<'a, C, &'a mut u32> {
   type Key = LogicalKey;
 
   type Error = PewErr; 
 
   fn load(
     _: Self::Key,
-    storage: &mut Storage<C>,
+    _: &mut Storage<C>,
     ctx: &mut C,
   ) -> Result<Loaded<Self>, Self::Error> {
+    // for the sake of the teste, just tap another resource as well
+    *FooWithCtx::inspect(ctx) += 1;
+
     *Self::inspect(ctx) += 1;
 
     Ok(Pew.into())
@@ -493,10 +498,16 @@ fn foo_by_stupid() {
   })
 }
 
-//#[test]
-//fn transitive_ctx() {
-//  utils::with_store(|mut store: Store<()>| {
-//    let ctx = Ctx::new();
-//
-//  }
-//}
+#[test]
+fn load_two_ctx() {
+  utils::with_store(|mut store: Store<Ctx>| {
+    let mut ctx = Ctx::new();
+
+    let key = LogicalKey::new("pew");
+
+    let _: Res<Pew> = store.get(&key, &mut ctx).expect("should always get a Pew");
+
+    assert_eq!(ctx.foo_nb, 1);
+    assert_eq!(ctx.pew_nb, 1);
+  })
+}
