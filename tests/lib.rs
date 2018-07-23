@@ -413,7 +413,7 @@ where Self: for<'a> Inspect<'a, C, &'a mut u32>,
       FooWithCtx: for<'a> Inspect<'a, C, &'a mut u32> {
   type Key = LogicalKey;
 
-  type Error = PewErr; 
+  type Error = PewErr;
 
   fn load(
     _: Self::Key,
