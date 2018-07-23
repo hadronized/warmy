@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
-use warmy::{FSKey, Load, Loaded, LogicalKey, Res, Storage, Store};
+use warmy::{FSKey, Inspect, Load, Loaded, LogicalKey, Res, Storage, Store};
 
 mod utils;
 
@@ -172,7 +172,7 @@ fn create_store() {
 }
 
 #[test]
-fn foo() {
+fn witness_sync() {
   utils::with_store(|mut store| {
     let ctx = &mut ();
     let expected1 = "Hello, world!".to_owned();
@@ -216,7 +216,7 @@ fn foo() {
 }
 
 #[test]
-fn foo_with_leading_slash() {
+fn vfs_leading_slash() {
   utils::with_store(|mut store| {
     let ctx = &mut ();
     let expected1 = "Hello, world!".to_owned();
@@ -339,39 +339,95 @@ fn logical_with_deps() {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct FooWithCtx(String);
-
-#[derive(Debug, Eq, PartialEq)]
 struct Ctx {
-  count: i32,
+  foo_nb: u32,
+  pew_nb: u32
 }
 
-impl Load<Ctx> for FooWithCtx {
+impl Ctx {
+  fn new() -> Self {
+    Ctx {
+      foo_nb: 0,
+      pew_nb: 0
+    }
+  }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct FooWithCtx(String);
+
+impl<'a> Inspect<'a, Ctx, &'a mut u32> for FooWithCtx {
+  fn inspect(ctx: &mut Ctx) -> &mut u32 {
+    &mut ctx.foo_nb
+  }
+}
+
+impl<C> Load<C> for FooWithCtx where Self: for<'a> Inspect<'a, C, &'a mut u32> {
   type Key = FSKey;
 
   type Error = FooErr;
 
   fn load(
     key: Self::Key,
-    storage: &mut Storage<Ctx>,
-    ctx: &mut Ctx,
+    storage: &mut Storage<C>,
+    ctx: &mut C,
   ) -> Result<Loaded<Self>, Self::Error>
   {
     // load as if it was a Foo
     let Loaded { res, deps } = <Foo as Load<_, ()>>::load(key, storage, ctx)?;
 
     // increment the counter
-    ctx.count += 1;
+    *Self::inspect(ctx) += 1;
 
     let r = Loaded::with_deps(FooWithCtx(res.0), deps);
     Ok(r)
   }
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct Pew;
+
+#[derive(Debug, Eq, PartialEq)]
+struct PewErr;
+
+impl Error for PewErr {
+  fn description(&self) -> &str {
+    "Pew error!"
+  }
+}
+
+impl fmt::Display for PewErr {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    f.write_str(self.description())
+  }
+}
+
+impl<'a> Inspect<'a, Ctx, &'a mut u32> for Pew {
+  fn inspect(ctx: &mut Ctx) -> &mut u32 {
+    &mut ctx.pew_nb
+  }
+}
+
+impl<C> Load<C> for Pew where Self: for<'a> Inspect<'a, C, &'a mut u32> {
+  type Key = LogicalKey;
+
+  type Error = PewErr; 
+
+  fn load(
+    _: Self::Key,
+    storage: &mut Storage<C>,
+    ctx: &mut C,
+  ) -> Result<Loaded<Self>, Self::Error> {
+    *Self::inspect(ctx) += 1;
+
+    Ok(Pew.into())
+  }
+}
+
 #[test]
 fn foo_with_ctx() {
   utils::with_store(|mut store: Store<Ctx>| {
-    let mut ctx = Ctx { count: 0 };
+    let mut ctx = Ctx::new();
 
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
@@ -411,7 +467,7 @@ fn foo_with_ctx() {
       }
     }
 
-    assert_eq!(ctx.count, 2);
+    assert_eq!(ctx.foo_nb, 2);
   })
 }
 
@@ -436,3 +492,11 @@ fn foo_by_stupid() {
     assert_eq!(&r.borrow().0, expected);
   })
 }
+
+//#[test]
+//fn transitive_ctx() {
+//  utils::with_store(|mut store: Store<()>| {
+//    let ctx = Ctx::new();
+//
+//  }
+//}
