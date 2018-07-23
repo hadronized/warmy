@@ -289,7 +289,7 @@
 //!
 //! See the documentation of `Load::reload` for further details.
 //!
-//! # Context
+//! # Context inspection
 //!
 //! A context is a special value you can access to via a mutable reference when loading or
 //! reloading. If you don’t need any, it’s highly recommended not to use `()` when implementing
@@ -315,7 +315,7 @@
 //! impl<C> Load<C> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
 //!   type Key = LogicalKey;
 //!
-//!   type Error = io::Error; // should be the never type, !, but not stable yet
+//!   type Error = io::Error;
 //!
 //!   fn load(
 //!     key: Self::Key,
@@ -335,6 +335,47 @@
 //!   let mut ctx = Ctx { nb_res_loaded: 0 };
 //!
 //!   let r: Res<Foo> = store.get(&LogicalKey::new("test-0"), &mut ctx).unwrap();
+//! }
+//! ```
+//!
+//! In this example, because the context value we want is the same as the [`Store`]’s context, a
+//! universal implementor of [`Inspect`] enables you to directly `inspect` the context. However, if
+//! you wanted to inspect it more precisely, like with `&mut usize`, you would need to write an
+//! implementation of [`Inspect`] for your types:
+//!
+//! ```
+//! use std::io;
+//! use warmy::{Inspect, Load, Loaded, LogicalKey, Storage};
+//!
+//! struct Foo;
+//!
+//! struct Ctx {
+//!   nb_res_loaded: usize
+//! }
+//!
+//! // this implementor states how the inspection should occur for Foo when the context has type
+//! // Ctx: by targetting a mutable reference on a usize (i.e. the counter)
+//! impl<'a> Inspect<'a, Ctx, &'a mut usize> for Foo {
+//!   fn inspect(ctx: &mut Ctx) -> &mut usize {
+//!     &mut ctx.nb_res_loaded
+//!   }
+//! }
+//!
+//! // notice the usize instead of Ctx here
+//! impl<C> Load<C> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut usize> {
+//!   type Key = LogicalKey;
+//!
+//!   type Error = io::Error;
+//!
+//!   fn load(
+//!     key: Self::Key,
+//!     storage: &mut Storage<C>,
+//!     ctx: &mut C
+//!   ) -> Result<Loaded<Self>, Self::Error> {
+//!     *Self::inspect(ctx) += 1; // direct access to the counter
+//!
+//!     Ok(Foo.into())
+//!   }
 //! }
 //! ```
 //!

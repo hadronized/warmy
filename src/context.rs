@@ -8,12 +8,12 @@
 ///
 /// # The semantics borrowing problem
 ///
-/// So imagine we have a `Foo` type. We would like to implement [`Load`] for `Foo` and use a `u32`
+/// So imagine we have a `Foo` type. We would like to implement `Load` for `Foo` and use a `u32`
 /// as mutable context as counter to increment every time a `Foo` gets loaded. However, imagine
 /// that this is a library type. It would be a pity to stick to a `Storage<u32>`, because then we
 /// couldn’t load our `Foo` with a more complex context type (for instance, provided by a binary’s
 /// code). The typical trick to fix that problem is to use a polymorphic `Storage<C>` and instead
-/// use something like `BorrowMut<u32> for C` as context type. That enables us to use any type of
+/// use something like `C: BorrowMut<u32>` as context type. That enables us to use any type of
 /// context and still access the variable we need for counting foos. Neat.
 ///
 /// However, consider another type, `Bar`, that also needs a `u32` to be incremented every time a
@@ -32,9 +32,10 @@
 /// semantics (one targets a counter for `Foo`, the other a counter for `Bar`). The [`Inspect`]
 /// trait encodes this situation as a tuple of types:
 ///
-///   - The borrower type — i.e. `Ctx` – which is the same as `Self` in the `BorrowMut` trait.
-///   - The borrowed type – i.e. `Borrowed` – which is the same one as in the `BorrowMut` trait.
-///   - The inspector type – i.e. `Self` – which doesn’t exist in the `BorrowMut` trait.
+///   - The borrower type — which is the same as `Self` in the `BorrowMut` trait.
+///   - The inspected type – which is the same one as in the `BorrowMut` trait if you inspect as a
+///     mutable reference to something.
+///   - The inspector type – which doesn’t exist in the `BorrowMut` trait.
 ///   - The method type – i.e. doesn’t exist in `BorrowMut` and only serves to have different kind
 ///     of inspection regarding the method you use.
 ///
@@ -65,8 +66,8 @@
 /// }
 /// ```
 ///
-/// And here you have it: borrowing the exact two different objects with the same type form the same
-/// object, some impossible with the standard `Borrow` trait.
+/// And here you have it: borrowing two different objects with the same type from the same object,
+/// something impossible with the standard `BorrowMut` trait.
 ///
 /// # Universal implementors
 ///
@@ -84,10 +85,10 @@
 /// # A note on the lifetime
 ///
 /// Because of being generic over the borrow lifetime, you can return any kind of borrow (not only
-/// references). This is a huge advancement over the current `Borrow` trait as it’s still possible
-/// to encode mutable references with `&'a mut _` but you can also returns any kind of type, even
-/// with a lifetime outliving the borrow. This enables returning `()` or other exotic kind of data
-/// (for instance, you might want to copy / clone something and not use any reference).
+/// references). This is a huge advancement over the current `BorrowMut` trait as it’s still
+/// possible to encode mutable references with `&'a mut _` but you can also returns any kind of
+/// type, even with a lifetime outliving the borrow. This enables returning `()` or other exotic
+/// kind of data (for instance, you might want to copy / clone something and not use any reference).
 pub trait Inspect<'a, Ctx, Inspected, Method = ()> {
   /// Inspect the context.
   fn inspect(ctx: &'a mut Ctx) -> Inspected;
