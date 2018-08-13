@@ -283,7 +283,7 @@ impl<C> Storage<C> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StoreError {
   /// The root path for a filesystem resource was not found.
-  RootDoesDotExit(PathBuf),
+  RootDoesNotExist(PathBuf),
   /// The key associated with a resource already exists in the `Store`.
   ///
   /// > Note: it is not currently possible to have two resources living in a `Store` and using an
@@ -300,7 +300,7 @@ impl fmt::Display for StoreError {
 impl Error for StoreError {
   fn description(&self) -> &str {
     match *self {
-      StoreError::RootDoesDotExit(_) => "root doesn’t exist",
+      StoreError::RootDoesNotExist(_) => "root doesn’t exist",
       StoreError::AlreadyRegisteredKey(_) => "already registered key",
     }
   }
@@ -509,7 +509,7 @@ impl<C> Store<C> {
     let root = &opt.root;
     let canon_root = root
       .canonicalize()
-      .map_err(|_| StoreError::RootDoesDotExit(root.to_owned()))?;
+      .map_err(|_| StoreError::RootDoesNotExist(root.to_owned()))?;
 
     // create the mpsc channel to communicate with the file watcher
     let (wsx, wrx) = channel();
