@@ -1,3 +1,9 @@
+# 0.8
+
+> Monday, 13th of August 2018
+
+  - Fix a typo in the `RootDoesNotExist` error type.
+
 ## 0.7.3
 
 > Tuesday, 24th of July 2018

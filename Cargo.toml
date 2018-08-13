@@ -1,6 +1,6 @@
 [package]
 name = "warmy"
-version = "0.7.3"
+version = "0.8.0"
 license = "BSD-3-Clause"
 authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
 description = "Hot-reloading loadable and reloadable resources"
