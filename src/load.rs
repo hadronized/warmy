@@ -625,8 +625,26 @@ impl<C> StoreOpt<C> {
   pub fn root(&self) -> &Path {
     &self.root
   }
-}
 
+  /// Change the discovery mechanism.
+  ///
+  /// # Default
+  ///
+  /// Defaults to `Discovery::default()`.
+  #[inline]
+  pub fn set_discovery(self, discovery: Discovery<C>) -> Self {
+    StoreOpt {
+      discovery,
+      ..self
+    }
+  }
+
+  /// Get the discovery mechanism.
+  #[inline]
+  pub fn discovery(&self) -> &Discovery<C> {
+    &self.discovery
+  }
+}
 
 /// Discovery.
 ///
@@ -635,7 +653,7 @@ impl<C> StoreOpt<C> {
 ///
 /// If you don’t care about discovering new resources, feel free to use the [`Default`] implementation.
 pub struct Discovery<C> {
-  closure: Box<FnMut(&Path, &mut Storage<C>, &mut C)>
+  closure: Box<FnMut(&Path, &mut Storage<C>, &mut C)>,
 }
 
 impl<C> Discovery<C> {
