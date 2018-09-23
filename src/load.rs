@@ -3,7 +3,8 @@
 //! This module exposes traits, types and functions you need to use to load and reload objects.
 
 use any_cache::{Cache, HashCache};
-use notify::{op::WRITE, raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::op::{CREATE, WRITE};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -396,7 +397,7 @@ where
 ///
 /// An object of this type is responsible to synchronize resources living in a store. It keeps in
 /// internal, optimized state to perform correct and efficient synchronization.
-struct Synchronizer {
+struct Synchronizer<C> {
   // all the resources that must be reloaded; they’re mapped to the instant they were found updated
   dirties: HashMap<DepKey, Instant>,
   // keep the watcher around so that we don’t have it disconnected
@@ -408,13 +409,16 @@ struct Synchronizer {
   // resource; the wait is done between the current time and the last time the resource was touched
   // by the event loop
   update_await_time_ms: u64,
+  // used to accept or ignore new discoveries
+  discovery: Discovery<C>
 }
 
-impl Synchronizer {
+impl<C> Synchronizer<C> {
   fn new(
     watcher: RecommendedWatcher,
     watcher_rx: Receiver<RawEvent>,
     update_await_time_ms: u64,
+    discovery: Discovery<C>
   ) -> Self
   {
     Synchronizer {
@@ -422,23 +426,29 @@ impl Synchronizer {
       watcher,
       watcher_rx,
       update_await_time_ms,
+      discovery
     }
   }
 
   /// Dequeue any file system events.
-  fn dequeue_fs_events<C>(&mut self, storage: &Storage<C>) {
+  fn dequeue_fs_events(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     for event in self.watcher_rx.try_iter() {
       match event {
         RawEvent {
           path: Some(ref path),
           op: Ok(op),
           ..
-        } if op | WRITE != Op::empty() =>
-        {
-          let dep_key = DepKey::Path(path.to_owned());
+        } => {
+          if op | WRITE != Op::empty() {
+            let dep_key = DepKey::Path(path.to_owned());
 
-          if storage.metadata.contains_key(&dep_key) {
-            self.dirties.insert(dep_key, Instant::now());
+            if storage.metadata.contains_key(&dep_key) {
+              self.dirties.insert(dep_key, Instant::now());
+            }
+          }
+          
+          if op | CREATE != Op::empty() {
+            self.discovery.discover(path, storage, ctx);
           }
         }
 
@@ -448,7 +458,7 @@ impl Synchronizer {
   }
 
   /// Reload any dirty resource that fulfill its time predicate.
-  fn reload_dirties<C>(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
+  fn reload_dirties(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     let update_await_time_ms = self.update_await_time_ms;
 
     self.dirties.retain(|dep_key, dirty_instant| {
@@ -485,8 +495,8 @@ impl Synchronizer {
   }
 
   /// Synchronize the `Storage` by updating the resources that ought to.
-  fn sync<C>(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
-    self.dequeue_fs_events(storage);
+  fn sync(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
+    self.dequeue_fs_events(storage, ctx);
     self.reload_dirties(storage, ctx);
   }
 }
@@ -494,7 +504,7 @@ impl Synchronizer {
 /// Resource store. Responsible for holding and presenting resources.
 pub struct Store<C> {
   storage: Storage<C>,
-  synchronizer: Synchronizer,
+  synchronizer: Synchronizer<C>,
 }
 
 impl<C> Store<C> {
@@ -504,7 +514,7 @@ impl<C> Store<C> {
   ///
   /// This function will fail if the root path in the `StoreOpt` doesn’t resolve to a correct
   /// canonicalized path.
-  pub fn new(opt: StoreOpt) -> Result<Self, StoreError> {
+  pub fn new(opt: StoreOpt<C>) -> Result<Self, StoreError> {
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
     let root = &opt.root;
     let canon_root = root
@@ -522,7 +532,7 @@ impl<C> Store<C> {
     let storage = Storage::new(canon_root);
 
     // create the synchronizer
-    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms);
+    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms, opt.discovery);
 
     let store = Store {
       storage,
@@ -555,21 +565,23 @@ impl<C> DerefMut for Store<C> {
 /// Various options to customize a `Store`.
 ///
 /// Feel free to inspect all of its declared methods for further information.
-pub struct StoreOpt {
+pub struct StoreOpt<C> {
   root: PathBuf,
   update_await_time_ms: u64,
+  discovery: Discovery<C>
 }
 
-impl Default for StoreOpt {
+impl<C> Default for StoreOpt<C> {
   fn default() -> Self {
     StoreOpt {
       root: PathBuf::from("."),
       update_await_time_ms: 50,
+      discovery: Discovery::default()
     }
   }
 }
 
-impl StoreOpt {
+impl<C> StoreOpt<C> {
   /// Change the update await time (milliseconds) used to determine whether a resource should be
   /// reloaded or not.
   ///
@@ -612,5 +624,42 @@ impl StoreOpt {
   #[inline]
   pub fn root(&self) -> &Path {
     &self.root
+  }
+}
+
+
+/// Discovery.
+///
+/// Such an object is called whenever a new resource is discovered and is relied on to decide what
+/// to do with the resource.
+///
+/// If you don’t care about discovering new resources, feel free to use the [`Default`] implementation.
+pub struct Discovery<C> {
+  closure: Box<FnMut(&Path, &mut Storage<C>, &mut C)>
+}
+
+impl<C> Discovery<C> {
+  /// Create an new filter.
+  pub fn new<F>(f: F) -> Self where F: 'static + FnMut(&Path, &mut Storage<C>, &mut C) {
+    Discovery {
+      closure: Box::new(f)
+    }
+  }
+
+  /// Filter a discovery.
+  pub fn discover(&mut self, path: &Path, storage: &mut Storage<C>, ctx: &mut C) {
+    (self.closure)(path, storage, ctx)
+  }
+}
+
+/// The default filter.
+///
+///   - Ignores any discovery.
+///   - Doesn’t allow for old resoruces to be discovered – i.e. resources that were there even
+///     before the application started. Set it to `true` if you want to see every resources in the
+///     root directory at startup.
+impl<C> Default for Discovery<C> {
+  fn default() -> Self {
+    Discovery::new(|_, _, _| {})
   }
 }

@@ -405,5 +405,5 @@ pub mod res;
 
 pub use context::Inspect;
 pub use key::{DepKey, FSKey, Key, LogicalKey};
-pub use load::{Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
+pub use load::{Discovery, Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
 pub use res::Res;
