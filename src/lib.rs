@@ -389,6 +389,21 @@
 //! them. In theory, those will be removed and placed into other crates to add automatic
 //! implementations.
 //!
+//! # Resource discovery
+//!
+//! Resource discovery is available via a simple mechanism: every time a new resource is available
+//! on the filesystem, a closure of your choice is called. This closure is passed the [`Storage`]
+//! of your [`Store`] as long as its associated context, enabling you to insert new resources on
+//! the fly.
+//!
+//! This is a bit different than the first option: this enables you to populate the store with
+//! resource you don’t know yet – e.g. a texture is saved in the store’s root and gets automatically
+//! added and reacted to.
+//!
+//! The feature is available via the [`StoreOpt`] object you have to create prior to generating a
+//! new [`Store`]. See the `StoreOpt::set_discovery` and `StoreOpt::discovery` functions for further
+//! details on how to use the resource discovery mechanism.
+//!
 //! [serde-json]: https://crates.io/crates/serde_json
 //! [serde_json::Error]: https://docs.serde.rs/serde_json/struct.Error.html
 //! [methods]: methods/index.html
