@@ -3,16 +3,15 @@
 //! This module exposes traits, types and functions you need to use to load and reload objects.
 
 use any_cache::{Cache, HashCache};
-use notify::{raw_watcher, Op, RawEvent, RecommendedWatcher, RecursiveMode, Watcher};
-use notify::op::{CREATE, WRITE};
-use std::collections::HashMap;
+use notify::{self, DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use key::{self, DepKey, Key, PrivateKey};
 use res::Res;
@@ -399,16 +398,12 @@ where
 /// internal, optimized state to perform correct and efficient synchronization.
 struct Synchronizer<C> {
   // all the resources that must be reloaded; they’re mapped to the instant they were found updated
-  dirties: HashMap<DepKey, Instant>,
+  dirties: HashSet<DepKey>,
   // keep the watcher around so that we don’t have it disconnected
   #[allow(dead_code)]
   watcher: RecommendedWatcher,
   // watcher receiver part of the channel
-  watcher_rx: Receiver<RawEvent>,
-  // time in milleseconds to wait before actually invoking the reloading function on a given
-  // resource; the wait is done between the current time and the last time the resource was touched
-  // by the event loop
-  update_await_time_ms: u64,
+  watcher_rx: Receiver<DebouncedEvent>,
   // used to accept or ignore new discoveries
   discovery: Discovery<C>
 }
@@ -416,16 +411,14 @@ struct Synchronizer<C> {
 impl<C> Synchronizer<C> {
   fn new(
     watcher: RecommendedWatcher,
-    watcher_rx: Receiver<RawEvent>,
-    update_await_time_ms: u64,
+    watcher_rx: Receiver<DebouncedEvent>,
     discovery: Discovery<C>
   ) -> Self
   {
     Synchronizer {
-      dirties: HashMap::new(),
+      dirties: HashSet::new(),
       watcher,
       watcher_rx,
-      update_await_time_ms,
       discovery
     }
   }
@@ -434,22 +427,16 @@ impl<C> Synchronizer<C> {
   fn dequeue_fs_events(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     for event in self.watcher_rx.try_iter() {
       match event {
-        RawEvent {
-          path: Some(ref path),
-          op: Ok(op),
-          ..
-        } => {
-          if op | WRITE != Op::empty() {
-            let dep_key = DepKey::Path(path.to_owned());
+        DebouncedEvent::Write(ref path) => {
+          let dep_key = DepKey::Path(path.to_owned());
 
-            if storage.metadata.contains_key(&dep_key) {
-              self.dirties.insert(dep_key, Instant::now());
-            }
+          if storage.metadata.contains_key(&dep_key) {
+            self.dirties.insert(dep_key);
           }
-          
-          if op | CREATE != Op::empty() {
-            self.discovery.discover(path, storage, ctx);
-          }
+        }
+
+        DebouncedEvent::Create(ref path) => {
+          self.discovery.discover(path, storage, ctx);
         }
 
         _ => (),
@@ -459,38 +446,28 @@ impl<C> Synchronizer<C> {
 
   /// Reload any dirty resource that fulfill its time predicate.
   fn reload_dirties(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
-    let update_await_time_ms = self.update_await_time_ms;
+    self.dirties.retain(|dep_key| {
+      if let Some(metadata) = storage.metadata.remove(&dep_key) {
+        if (metadata.on_reload)(storage, ctx).is_ok() {
+          // if we have successfully reloaded the resource, notify the observers that this
+          // dependency has changed
+          if let Some(deps) = storage.deps.get(&dep_key).cloned() {
+            for dep in deps {
+              if let Some(obs_metadata) = storage.metadata.remove(&dep) {
+                // FIXME: decide what to do with the result (error?)
+                let _ = (obs_metadata.on_reload)(storage, ctx);
 
-    self.dirties.retain(|dep_key, dirty_instant| {
-      let now = Instant::now();
-
-      // check whether we’ve waited enough to actually invoke the reloading code
-      if now.duration_since(dirty_instant.clone()) >= Duration::from_millis(update_await_time_ms) {
-        // we’ve waited enough; reload
-        if let Some(metadata) = storage.metadata.remove(&dep_key) {
-          if (metadata.on_reload)(storage, ctx).is_ok() {
-            // if we have successfully reloaded the resource, notify the observers that this
-            // dependency has changed
-            if let Some(deps) = storage.deps.get(&dep_key).cloned() {
-              for dep in deps {
-                if let Some(obs_metadata) = storage.metadata.remove(&dep) {
-                  // FIXME: decide what to do with the result (error?)
-                  let _ = (obs_metadata.on_reload)(storage, ctx);
-
-                  // reinject the dependency once afterwards
-                  storage.metadata.insert(dep, obs_metadata);
-                }
+                // reinject the dependency once afterwards
+                storage.metadata.insert(dep, obs_metadata);
               }
             }
           }
-
-          storage.metadata.insert(dep_key.clone(), metadata);
         }
 
-        false
-      } else {
-        true
+        storage.metadata.insert(dep_key.clone(), metadata);
       }
+
+      false
     });
   }
 
@@ -523,7 +500,7 @@ impl<C> Store<C> {
 
     // create the mpsc channel to communicate with the file watcher
     let (wsx, wrx) = channel();
-    let mut watcher = raw_watcher(wsx).unwrap();
+    let mut watcher = notify::watcher(wsx, opt.debounce_duration).unwrap();
 
     // spawn a new thread in which we look for events
     let _ = watcher.watch(&canon_root, RecursiveMode::Recursive);
@@ -532,7 +509,7 @@ impl<C> Store<C> {
     let storage = Storage::new(canon_root);
 
     // create the synchronizer
-    let synchronizer = Synchronizer::new(watcher, wrx, opt.update_await_time_ms, opt.discovery);
+    let synchronizer = Synchronizer::new(watcher, wrx, opt.discovery);
 
     let store = Store {
       storage,
@@ -567,7 +544,7 @@ impl<C> DerefMut for Store<C> {
 /// Feel free to inspect all of its declared methods for further information.
 pub struct StoreOpt<C> {
   root: PathBuf,
-  update_await_time_ms: u64,
+  debounce_duration: Duration,
   discovery: Discovery<C>
 }
 
@@ -575,14 +552,14 @@ impl<C> Default for StoreOpt<C> {
   fn default() -> Self {
     StoreOpt {
       root: PathBuf::from("."),
-      update_await_time_ms: 50,
+      debounce_duration: Duration::from_millis(50),
       discovery: Discovery::default()
     }
   }
 }
 
 impl<C> StoreOpt<C> {
-  /// Change the update await time (milliseconds) used to determine whether a resource should be
+  /// Change the debounce duration used to determine whether a resource should be
   /// reloaded or not.
   ///
   /// A `Store` will wait that amount of time before deciding an resource should be reloaded after
@@ -593,17 +570,17 @@ impl<C> StoreOpt<C> {
   ///
   /// Defaults to `50` milliseconds.
   #[inline]
-  pub fn set_update_await_time_ms(self, ms: u64) -> Self {
+  pub fn set_debounce_duration(self, duration: Duration) -> Self {
     StoreOpt {
-      update_await_time_ms: ms,
+      debounce_duration: duration,
       ..self
     }
   }
 
-  /// Get the update await time (milliseconds).
+  /// Get the debounce duration.
   #[inline]
-  pub fn update_await_time_ms(&self) -> u64 {
-    self.update_await_time_ms
+  pub fn debounce_duration(&self) -> Duration {
+    self.debounce_duration
   }
 
   /// Change the root directory from which the `Store` will be watching file changes.
