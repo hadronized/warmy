@@ -1,3 +1,12 @@
+# 0.9
+
+> Tuesday, 25th of September 2018
+
+  - Add the resource discovery mechanism.
+  - Change some internal code about debounced events. That has the effect to change the interface of
+    the debounce duration’s type, going from *milliseconds* as `u64` to a more common and pleasant
+    type to work with: `std::time::Duration`.
+
 # 0.8
 
 > Monday, 13th of August 2018
