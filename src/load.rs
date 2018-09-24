@@ -52,8 +52,7 @@ where Method: ?Sized {
     key: Self::Key,
     storage: &mut Storage<C>,
     ctx: &mut C,
-  ) -> Result<Self, Self::Error>
-  {
+  ) -> Result<Self, Self::Error> {
     Self::load(key, storage, ctx).map(|lr| lr.res)
   }
 }
@@ -149,8 +148,7 @@ impl<C> Storage<C> {
   ) -> Result<Res<T>, StoreError>
   where
     T: Load<C, M>,
-    T::Key: Clone + hash::Hash + Into<DepKey>,
-  {
+    T::Key: Clone + hash::Hash + Into<DepKey> {
     let dep_key = key.clone().into();
 
     // we forbid having two resources sharing the same key
@@ -218,8 +216,7 @@ impl<C> Storage<C> {
   ) -> Result<Res<T>, StoreErrorOr<T, C, M>>
   where
     T: Load<C, M>,
-    K: Clone + Into<T::Key>,
-  {
+    K: Clone + Into<T::Key> {
     let key_ = key.clone().into().prepare_key(self.root());
     let dep_key = key_.clone().into();
     let pkey = PrivateKey::<T>::new(dep_key);
@@ -251,8 +248,7 @@ impl<C> Storage<C> {
   where
     T: Load<C>,
     K: Clone + Into<T::Key>,
-    P: FnOnce() -> T,
-  {
+    P: FnOnce() -> T {
     self
       .get(key, ctx)
       .or_else(|_| self.inject::<T, ()>(key.clone().into(), proxy(), Vec::new()))
@@ -271,8 +267,7 @@ impl<C> Storage<C> {
   where
     T: Load<C, M>,
     K: Clone + Into<T::Key>,
-    P: FnOnce() -> T,
-  {
+    P: FnOnce() -> T {
     self
       .get_by(key, ctx, method)
       .or_else(|_| self.inject::<T, M>(key.clone().into(), proxy(), Vec::new()))
@@ -318,8 +313,7 @@ where T: Load<C, M> {
 impl<T, C, M> Clone for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: Clone,
-{
+  T::Error: Clone {
   fn clone(&self) -> Self {
     match *self {
       StoreErrorOr::StoreError(ref e) => StoreErrorOr::StoreError(e.clone()),
@@ -331,15 +325,12 @@ where
 impl<T, C, M> Eq for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: Eq,
-{
-}
+  T::Error: Eq {}
 
 impl<T, C, M> PartialEq for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: PartialEq,
-{
+  T::Error: PartialEq {
   fn eq(&self, rhs: &Self) -> bool {
     match (self, rhs) {
       (&StoreErrorOr::StoreError(ref a), &StoreErrorOr::StoreError(ref b)) => a == b,
@@ -352,8 +343,7 @@ where
 impl<T, C, M> fmt::Debug for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: fmt::Debug,
-{
+  T::Error: fmt::Debug {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
       StoreErrorOr::StoreError(ref e) => f.debug_tuple("StoreError").field(e).finish(),
@@ -365,8 +355,7 @@ where
 impl<T, C, M> fmt::Display for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: fmt::Debug,
-{
+  T::Error: fmt::Debug {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     f.write_str(self.description())
   }
@@ -375,8 +364,7 @@ where
 impl<T, C, M> Error for StoreErrorOr<T, C, M>
 where
   T: Load<C, M>,
-  T::Error: fmt::Debug,
-{
+  T::Error: fmt::Debug {
   fn description(&self) -> &str {
     match *self {
       StoreErrorOr::StoreError(ref e) => e.description(),
@@ -413,8 +401,7 @@ impl<C> Synchronizer<C> {
     watcher: RecommendedWatcher,
     watcher_rx: Receiver<DebouncedEvent>,
     discovery: Discovery<C>
-  ) -> Self
-  {
+  ) -> Self {
     Synchronizer {
       dirties: HashSet::new(),
       watcher,
@@ -633,6 +620,13 @@ pub struct Discovery<C> {
 
 impl<C> Discovery<C> {
   /// Create an new filter.
+  ///
+  /// The closure is passed the path of the discovered resource along with the storage and the
+  /// context so that you can `get` that resource if you want. Keep in mind that the path is a raw
+  /// and absolute path: you’ll have to extract the key (according to the type of resource you
+  /// target) and pattern-match the extension / mime type on your own to choose which type of
+  /// resource you want to get. Or you’ll just go full one-way and use the same resource type for
+  /// all discovery, that’s also possible.
   pub fn new<F>(f: F) -> Self where F: 'static + FnMut(&Path, &mut Storage<C>, &mut C) {
     Discovery {
       closure: Box::new(f)
@@ -640,7 +634,7 @@ impl<C> Discovery<C> {
   }
 
   /// Filter a discovery.
-  pub fn discover(&mut self, path: &Path, storage: &mut Storage<C>, ctx: &mut C) {
+  fn discover(&mut self, path: &Path, storage: &mut Storage<C>, ctx: &mut C) {
     (self.closure)(path, storage, ctx)
   }
 }
@@ -648,9 +642,6 @@ impl<C> Discovery<C> {
 /// The default filter.
 ///
 ///   - Ignores any discovery.
-///   - Doesn’t allow for old resoruces to be discovered – i.e. resources that were there even
-///     before the application started. Set it to `true` if you want to see every resources in the
-///     root directory at startup.
 impl<C> Default for Discovery<C> {
   fn default() -> Self {
     Discovery::new(|_, _, _| {})
