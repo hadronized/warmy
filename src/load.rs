@@ -427,16 +427,14 @@ impl<C> Synchronizer<C> {
   fn dequeue_fs_events(&mut self, storage: &mut Storage<C>, ctx: &mut C) {
     for event in self.watcher_rx.try_iter() {
       match event {
-        DebouncedEvent::Write(ref path) => {
+        DebouncedEvent::Write(ref path) | DebouncedEvent::Create(ref path) => {
           let dep_key = DepKey::Path(path.to_owned());
 
           if storage.metadata.contains_key(&dep_key) {
             self.dirties.insert(dep_key);
+          } else {
+            self.discovery.discover(path, storage, ctx);
           }
-        }
-
-        DebouncedEvent::Create(ref path) => {
-          self.discovery.discover(path, storage, ctx);
         }
 
         _ => (),
