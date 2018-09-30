@@ -5,8 +5,7 @@
 use any_cache::{Cache, HashCache};
 use notify::{self, DebouncedEvent, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::{HashMap, HashSet};
-use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Display};
 use std::hash;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -29,7 +28,7 @@ where Method: ?Sized {
   type Key: key::Key + 'static;
 
   /// Type of error that might happen while loading.
-  type Error: Error + 'static;
+  type Error: Display + 'static;
 
   /// Load a resource.
   ///
@@ -94,12 +93,12 @@ impl<T> From<T> for Loaded<T> {
 /// Metadata about a resource.
 struct ResMetaData<C> {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Error>>>,
+  on_reload: Box<Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Display>>>,
 }
 
 impl<C> ResMetaData<C> {
   fn new<F>(f: F) -> Self
-  where F: 'static + Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Error>> {
+  where F: 'static + Fn(&mut Storage<C>, &mut C) -> Result<(), Box<Display>> {
     ResMetaData {
       on_reload: Box::new(f),
     }
@@ -286,24 +285,17 @@ pub enum StoreError {
   AlreadyRegisteredKey(DepKey),
 }
 
-impl fmt::Display for StoreError {
+impl Display for StoreError {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
-  }
-}
-
-impl Error for StoreError {
-  fn description(&self) -> &str {
     match *self {
-      StoreError::RootDoesNotExist(_) => "root doesn’t exist",
-      StoreError::AlreadyRegisteredKey(_) => "already registered key",
+      StoreError::RootDoesNotExist(ref path) => write!(f, "root {} doesn’t exist", path.display()),
+      StoreError::AlreadyRegisteredKey(ref dk) => write!(f, "already registered key: {}", dk),
     }
   }
 }
 
 /// Either a store error or a resource loading error.
-pub enum StoreErrorOr<T, C, M = ()>
-where T: Load<C, M> {
+pub enum StoreErrorOr<T, C, M = ()> where T: Load<C, M> {
   /// A store error.
   StoreError(StoreError),
   /// A resource error.
@@ -311,9 +303,8 @@ where T: Load<C, M> {
 }
 
 impl<T, C, M> Clone for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: Clone {
+where T: Load<C, M>,
+      T::Error: Clone {
   fn clone(&self) -> Self {
     match *self {
       StoreErrorOr::StoreError(ref e) => StoreErrorOr::StoreError(e.clone()),
@@ -323,14 +314,13 @@ where
 }
 
 impl<T, C, M> Eq for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: Eq {}
+where T: Load<C, M>,
+      T::Error: Eq {
+}
 
 impl<T, C, M> PartialEq for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: PartialEq {
+where T: Load<C, M>,
+      T::Error: PartialEq {
   fn eq(&self, rhs: &Self) -> bool {
     match (self, rhs) {
       (&StoreErrorOr::StoreError(ref a), &StoreErrorOr::StoreError(ref b)) => a == b,
@@ -341,9 +331,8 @@ where
 }
 
 impl<T, C, M> fmt::Debug for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: fmt::Debug {
+where T: Load<C, M>,
+      T::Error: fmt::Debug {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     match *self {
       StoreErrorOr::StoreError(ref e) => f.debug_tuple("StoreError").field(e).finish(),
@@ -352,30 +341,13 @@ where
   }
 }
 
-impl<T, C, M> fmt::Display for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: fmt::Debug {
+impl<T, C, M> Display for StoreErrorOr<T, C, M>
+where T: Load<C, M>,
+      T::Error: fmt::Debug {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
-  }
-}
-
-impl<T, C, M> Error for StoreErrorOr<T, C, M>
-where
-  T: Load<C, M>,
-  T::Error: fmt::Debug {
-  fn description(&self) -> &str {
     match *self {
-      StoreErrorOr::StoreError(ref e) => e.description(),
-      StoreErrorOr::ResError(ref e) => e.description(),
-    }
-  }
-
-  fn cause(&self) -> Option<&Error> {
-    match *self {
-      StoreErrorOr::StoreError(ref e) => e.cause(),
-      StoreErrorOr::ResError(ref e) => e.cause(),
+      StoreErrorOr::StoreError(ref e) => e.fmt(f),
+      StoreErrorOr::ResError(ref e) => e.fmt(f),
     }
   }
 }

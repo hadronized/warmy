@@ -1,3 +1,12 @@
+# 0.10
+
+> Sunday, 30th of September 2018
+
+  - Replace and remove the `std::error::Error` constraint by `Display` in the `Error` associated
+    type of the `Load` trait.
+  - Enhance the implementation of the `Display` trait for several types.
+  - Implement `Display` for the `DepKey` type.
+
 # 0.9
 
 > Tuesday, 25th of September 2018
@@ -25,28 +34,28 @@
 
 > Monday, April, 30th 2018
 
-  - Fixed a typo in the README.md. (am I drunk or what?)
+  - Fix a typo in the README.md. (am I drunk or what?)
 
 ## 0.7.1
 
 > Monday, April, 30th 2018
 
-  - Fixed a typo in the README.md.
+  - Fix a typo in the README.md.
 
 # 0.7
 
 > Monday, April, 30th 2018
 
-  - Refactored and reworked all the key system. The new system implements a
+  - Refactor and reworked all the key system. The new system implements a
     [VFS](https://en.wikipedia.org/wiki/Virtual_file_system) and is easier to use – among important
     changes: the functional dependency between a key and the resource it points to was removed and is
     now injected by the implementation.
-  - Added a `rustfmt.toml` file to the project. This is an experiment only to see whether it makes it
+  - Add a `rustfmt.toml` file to the project. This is an experiment only to see whether it makes it
     easier to collaborate.
-  - Added context passing. That enables situations where a mutable reference can be passed to a
+  - Add context passing. That enables situations where a mutable reference can be passed to a
     loading or even reloading resource, allowing for several interesting situations (loading /
     reloading statistics, tuning, etc.).
-  - Added loading and reloading methods. Those are tag-only type variables that can be used to
+  - Add loading and reloading methods. Those are tag-only type variables that can be used to
     implement `Load` several times for a same type `T`, giving it the possibility to load or reload
     via several algorithms (JSON, YAML, custom, etc.).
   - Complete rewrite of the documentation. The documentation index (at the crate level) now contains
