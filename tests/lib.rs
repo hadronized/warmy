@@ -1,6 +1,5 @@
 extern crate warmy;
 
-use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -17,15 +16,9 @@ struct Foo(String);
 #[derive(Debug, Eq, PartialEq)]
 struct FooErr;
 
-impl Error for FooErr {
-  fn description(&self) -> &str {
-    "Foo error!"
-  }
-}
-
 impl fmt::Display for FooErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
+    f.write_str("Foo error!")
   }
 }
 
@@ -72,15 +65,9 @@ struct Bar(String);
 #[derive(Debug, Eq, PartialEq)]
 struct BarErr;
 
-impl Error for BarErr {
-  fn description(&self) -> &str {
-    "Bar error!"
-  }
-}
-
 impl fmt::Display for BarErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
+    f.write_str("Bar error!")
   }
 }
 
@@ -101,15 +88,9 @@ struct Zoo(String);
 #[derive(Debug, Eq, PartialEq)]
 struct ZooErr;
 
-impl Error for ZooErr {
-  fn description(&self) -> &str {
-    "Zoo error!"
-  }
-}
-
 impl fmt::Display for ZooErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
+    f.write_str("Zoo error!")
   }
 }
 
@@ -132,15 +113,9 @@ struct LogicalFoo(String);
 #[derive(Debug, Eq, PartialEq)]
 struct LogicalFooErr;
 
-impl Error for LogicalFooErr {
-  fn description(&self) -> &str {
-    "Logical Foo error!"
-  }
-}
-
 impl fmt::Display for LogicalFooErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
+    f.write_str("Logical Foo error!")
   }
 }
 
@@ -390,15 +365,9 @@ struct Pew;
 #[derive(Debug, Eq, PartialEq)]
 struct PewErr;
 
-impl Error for PewErr {
-  fn description(&self) -> &str {
-    "Pew error!"
-  }
-}
-
 impl fmt::Display for PewErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str(self.description())
+    f.write_str("Pew error!")
   }
 }
 
