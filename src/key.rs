@@ -8,6 +8,7 @@
 
 use any_cache::CacheKey;
 use std::hash;
+use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
@@ -20,6 +21,15 @@ pub enum DepKey {
   Path(PathBuf),
   /// A key to a resource living in memory or computed on the fly – akin to `LogicalKey`.
   Logical(String),
+}
+
+impl Display for DepKey {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+    match *self {
+      DepKey::Path(ref path) => write!(f, "{}", path.display()),
+      DepKey::Logical(ref name) => write!(f, "{}", name)
+    }
+  }
 }
 
 /// Filesystem key.
