@@ -7,7 +7,7 @@
 //!   - `DeyKep`.
 
 use any_cache::CacheKey;
-use std::hash;
+use std::hash::{Hash, Hasher};
 use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
@@ -82,7 +82,7 @@ impl From<LogicalKey> for DepKey {
 }
 
 /// Class of keys recognized by `warmy`.
-pub trait Key: Clone + hash::Hash + Into<DepKey> {
+pub trait Key: 'static + Clone + Eq + Hash {
   /// Prepare a key.
   ///
   /// If your key is akin to `FSKey`, it’s very likely you need to substitute its VFS path with the
@@ -131,22 +131,20 @@ fn vfs_substite_path(path: &Path, root: &Path) -> PathBuf {
   }
 }
 
-pub(crate) struct PrivateKey<T>(DepKey, PhantomData<T>);
+pub(crate) struct PrivateKey<K, T>(pub(crate) K, PhantomData<T>);
 
-impl<T> PrivateKey<T> {
-  pub(crate) fn new(dep_key: DepKey) -> Self {
-    PrivateKey(dep_key, PhantomData)
+impl<K, T> PrivateKey<K, T> {
+  pub(crate) fn new(key: K) -> Self {
+    PrivateKey(key, PhantomData)
   }
 }
 
-impl<T> hash::Hash for PrivateKey<T> {
-  fn hash<H>(&self, state: &mut H)
-  where H: hash::Hasher {
+impl<K, T> Hash for PrivateKey<K, T> where K: Hash {
+  fn hash<H>(&self, state: &mut H) where H: Hasher {
     self.0.hash(state)
   }
 }
 
-impl<T> CacheKey for PrivateKey<T>
-where T: 'static {
+impl<K, T> CacheKey for PrivateKey<K, T> where T: 'static, K: Key {
   type Target = Res<T>;
 }
