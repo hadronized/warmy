@@ -11,8 +11,7 @@
 //!     I/O.
 //!
 //! Resources are referred to by *keys*. A *key* is a typed index that contains enough information
-//! to uniquely identify a resource living in a store. You will find *filesystem keys* and *logical
-//! keys*.
+//! to uniquely identify a resource living in a store.
 //!
 //! This small introduction will give you enough information and examples to get your feet wet with
 //! `warmy`. If you want to know more, feel free to visit the documentation of submodules.
@@ -26,8 +25,8 @@
 //! four items:
 //!
 //!   - The [`Store`], which holds and caches resources.
-//!   - The `Load::Key` associated type, used to tell `warmy` which kind of resource your type
-//!     represents and what information the key must contain.
+//!   - The `Key` type variable, used to tell `warmy` which kind of resource your store knows how to
+//!     represent and what information the key must contain.
 //!   - The `Load::Error` associated type, that is the error type used when loading fails.
 //!   - The `Load::load` method, which is the method called to load your resource in a given store.
 //!
@@ -35,30 +34,31 @@
 //!
 //! A [`Store`] is responsible for holding and caching resources. Each [`Store`] is associated with a
 //! *root*, which is a path on the filesystem all filesystem resources will come from. You create a
-//! [`Store`] by giving it a [`StoreOpt`], which is used to customize the [`Store`] – if you don’t need
-//! it, use `Store::default`.
+//! [`Store`] by giving it a [`StoreOpt`], which is used to customize the [`Store`] – if you don’t
+//! need it nor care about it for the moment, just use `Store::default`.
 //!
 //! ```
-//! use warmy::{Store, StoreOpt};
+//! use warmy::{SimpleKey, Store, StoreOpt};
 //!
-//! let res = Store::<()>::new(StoreOpt::default());
+//! let res = Store::<(), SimpleKey>::new(StoreOpt::default());
 //!
 //! match res {
 //!   Err(e) => {
-//!     eprintln!("unable to create the store: {:#?}", e);
+//!     eprintln!("unable to create the store: {}", e);
 //!   }
 //!
 //!   Ok(store) => ()
 //! }
 //! ```
 //!
-//! As you can see, the [`Store`] has a type variable. This type variable refers to the type of
-//! *context* you want to use with your resource. For now we’ll use `()` as we don’t want contexts,
-//! but more to come. Keep on reading.
+//! As you can see, the [`Store`] has two type variables. These type variables refer to the types of
+//! *context* you want to use with your resources and the type of keys. For now we’ll use `()` for
+//! the context as we don’t want contexts – but more to come – and the common [`SimpleKey`] type
+//! for keys. Keep on reading.
 //!
-//! ## `Load::Key`
+//! ## The `Key` type variable
 //!
-//! This associated type must implement [`Key`], which is the class of types recognized as keys by
+//! The key type must implement [`Key`], which is the class of types recognized as keys by
 //! `warmy`. In theory, you shouldn’t worry about that trait because `warmy` already ships with some
 //! key types.
 //!
@@ -67,73 +67,53 @@
 //! Keys are a core concept in `warmy` as they are objects that uniquely represent resources –
 //! should they be on a filesystem or in memory. You will refer to your resources with those keys.
 //!
-//! Let’s dig in some key types.
+//! ### Special case: simple keys
 //!
-//! ### The classic: FSKey, the filesystem key
+//! A *simple key* (a.k.a. [`SimpleKey`]) is a key used to express common situations in which you
+//! might have resources from the filesystem and from logical locations. It’s provided for
+//! convenience, so that you don’t have to write that type and implement [`Key`]. In most
+//! situations, it should be enough for you – of course, if you need more details, feel free to
+//! define your own key type.
 //!
-//! [`FSKey`] is the type of key to choose if you want to refer to a resource on a filesystem. It’s
-//! very easy to build one:
-//!
-//! ```
-//! use warmy::FSKey;
-//!
-//! let my_key = FSKey::new("/foo/bar/zoo.json");
-//! ```
-//!
-//! The paths you use in [`FSKey`] are always relative to the store’s root, which implements some kind
-//! of a [VFS] for those keys.
-//!
-//! > Note: if you don’t use the leading `'/'`, the [`FSKey`] is still considered as if it was
-//! > expressed with a leading `'/'`. Both `FSKey::new("/zulu.json")` and `FSKey::new("zulu.json")`
-//! > refer to the exact same resource.
-//!
-//! ### Flexibility: LogicalKey, the memory key
-//!
-//! This type of key is a bit hard to wrap your finger around at first, because you might not need
-//! it. This type of key enables you to create unique identifiers for resources that do not
-//! *necessarily* exist on a filesystem. Those are like keys in a key-value store (think of the
-//! *local storage* of your web browser, for instance).
-//!
-//! However, they come in **very handy** when coping with dependency graphs. More on that in a few
-//! minutes – keep on reading!
-//!
-//! ```
-//! use warmy::LogicalKey;
-//!
-//! let my_key = LogicalKey::new("586e6452-4bac-11e8-842f-0ed5f89f718b");
-//! ```
-//!
-//! Logical keys are very simple to use and may contain any kind of information. However, for now,
-//! they must be encoded with strings.
-//!
-//! ### Special case: dependency key
-//!
-//! A *dependency key* (a.k.a. [`DepKey`]) is a key used to express dependencies. Any type of key that
-//! implements [`Key`] also implements `Into<DepKey>`, which comes in handy when you want to build
-//! heterogenous lists of dependency keys.
-//!
-//! [`DepKey`] is either akin to a [`FSKey`] or [`LogicalKey`].
-//!
-//! ## `Load::Error`
+//! ## The `Load::Error` associated type
 //!
 //! This associated type must be set to the type of error your loading implementation might
 //! generate. For instance, if you load something with [serde-json], you might want to set it to
-//! °serde_json::Error`.
+//! °serde_json::Error`. This way of doing is very common in Rust; you shouldn’t feel uncomfortable
+//! with it.
 //!
-//! > On a general note, you should always try to stick precise and accurate errors.Avoid simple
-//! > types such as `String` or `u64` and prefer to use detailed, algebraic datatypes.
+//! > On a general note, you should always try to stick to precise and accurate errors types. Avoid
+//! > simple types such as `String` or `u64` and prefer to use detailed, algebraic datatypes.
 //!
-//! ## Load::load
+//! ## The `Load::load` method
 //!
 //! This is the entry-point method. `Load::load` must be implemented in order for `warmy` to know
 //! how to read the resource. Let’s implement it for two types: one that represents a resource on
 //! the filesystem, one computed from memory.
 //!
 //! ```
+//! use std::fmt;
 //! use std::fs::File;
 //! use std::io::{self, Read};
-//! use std::path::PathBuf;
-//! use warmy::{FSKey, Load, Loaded, LogicalKey, Storage};
+//! use warmy::{Load, Loaded, SimpleKey, Storage};
+//!
+//! // Possible errors that might happen.
+//! #[derive(Debug)]
+//! enum Error {
+//!   CannotLoadFromFS,
+//!   CannotLoadFromLogical,
+//!   IOError(io::Error)
+//! }
+//!
+//! impl fmt::Display for Error {
+//!   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+//!     match *self {
+//!       Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+//!       Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+//!       Error::IOError(ref e) => write!(f, "IO error: {}", e),
+//!     }
+//!   }
+//! }
 //!
 //! // The resource we want to take from a file.
 //! struct FromFS(String);
@@ -141,36 +121,46 @@
 //! // The resource we want to compute from memory.
 //! struct FromMem(usize);
 //!
-//! impl<C> Load<C> for FromFS {
-//!   type Key = FSKey;
-//!
-//!   type Error = io::Error;
+//! impl<C> Load<C, SimpleKey> for FromFS {
+//!   type Error = Error;
 //!
 //!   fn load(
-//!     key: Self::Key,
-//!     storage: &mut Storage<C>,
+//!     key: SimpleKey,
+//!     storage: &mut Storage<C, SimpleKey>,
 //!     _: &mut C
-//!   ) -> Result<Loaded<Self>, Self::Error> {
-//!     let mut fh = File::open(key.as_path())?;
-//!     let mut s = String::new();
-//!     fh.read_to_string(&mut s);
+//!   ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+//!     // as we only accept filesystem here, we’ll ensure the key is a filesystem one
+//!     match key {
+//!       SimpleKey::Path(path) => {
+//!         let mut fh = File::open(path).map_err(Error::IOError)?;
+//!         let mut s = String::new();
+//!         fh.read_to_string(&mut s);
 //!
-//!     Ok(FromFS(s).into())
+//!         Ok(FromFS(s).into())
+//!       }
+//!
+//!       SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
+//!     }
 //!   }
 //! }
 //!
-//! impl<C> Load<C> for FromMem {
-//!   type Key = LogicalKey;
-//!
-//!   type Error = io::Error;
+//! impl<C> Load<C, SimpleKey> for FromMem {
+//!   type Error = Error;
 //!
 //!   fn load(
-//!     key: Self::Key,
-//!     storage: &mut Storage<C>,
+//!     key: SimpleKey,
+//!     storage: &mut Storage<C, SimpleKey>,
 //!     _: &mut C
-//!   ) -> Result<Loaded<Self>, Self::Error> {
-//!     // this is a bit dummy, but why not?
-//!     Ok(FromMem(key.as_str().len()).into())
+//!   ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+//!     // ensure we only accept logical resources
+//!     match key {
+//!       SimpleKey::Logical(key) => {
+//!         // this is a bit dummy, but why not?
+//!         Ok(FromMem(key.len()).into())
+//!       }
+//!
+//!       SimpleKey::Path(_) => Err(Error::CannotLoadFromFS)
+//!     }
 //!   }
 //! }
 //! ```
@@ -193,29 +183,30 @@
 //! When you implement `Load::load`, you are handed a [`Storage`]. You can use that [`Storage`] to load
 //! additional resources and gather them in your resources. When those additional resources get
 //! reloaded, if you directly embed the resources in your object, you will automatically see the
-//! automated resources. However, if you don’t express a *dependency relationship* to those
-//! resources, your former resource will not reload – it will just use automatically-synced
-//! resources, but it will not reload itself. This is a bit touchy but let’s take an example of a
-//! typical situation where you might want to use dependencies and then dependencies graphs:
+//! automated resources – that is the whole point of this crate! However, if you don’t express a
+//! *dependency relationship* to those resources, your former resource will not reload – it will
+//! just use automatically-synced resources, but it will not reload itself. This is a bit touchy
+//! but let’s take an example of a typical situation where you might want to use dependencies and
+//! then dependency graphs:
 //!
 //!   1. You want to load an object that is represented by aggregation of several values /
 //!      resources.
-//!   2. You choose to use a *logical resource* and guess all the files to load from a
-//!      [`LogicalKey`].
+//!   2. You choose to use a *logical resource* and guess all the files to load from.
 //!   3. When you implement `Load::load`, you open several files, load them into memory, compose
 //!      them and finally end up with your object.
 //!   4. You return your object from `Load::load` with no dependencies (i.e. you use `.into()` on
 //!      it).
 //!
-//! What is going to happen here is that if any of the files your resource depends on changes,
-//! since they don’t have a proper resource in the store, your object will see nothing. A typical
-//! solution there is to load those files as proper resources (by using [`FSKey`]) and put those
-//! keys in the returned [`Loaded`] object to express that you *depend on the reloading of the
-//! objects referred by these keys*. It’s a bit touchy but you will eventually find yourself in a
-//! situation when this [`Loaded`] thing will help you. You will then use `Loaded::with_deps`. See
-//! the documentation of [`Loaded`] for further information.
+//! What is going to happen here is that if any file your resource depends on changes, since they
+//! don’t have a proper resource in the store, your object will see nothing. A typical
+//! solution there is to load those files as proper resources and put those keys in the returned
+//! [`Loaded`] object to express that you *depend on the reloading of the objects referred by these
+//! keys*. It’s a bit touchy but you will eventually find yourself in a situation when this
+//! [`Loaded`] thing will help you. You will then use `Loaded::with_deps`. See the documentation of
+//! [`Loaded`] for further information.
 //!
-//! > Fun fact: [`LogicalKey`] was introduced to solve that problem along with dependency graphs.
+//! > Fun fact: logical resources were introduced to solve that problem along with dependency
+//! > graphs.
 //!
 //! ## Let’s get some things!
 //!
@@ -232,43 +223,67 @@
 //! Let’s focus on `Store::get` for this tutorial.
 //!
 //! ```
+//! use std::fmt;
 //! use std::fs::File;
 //! use std::io::{self, Read};
-//! use std::path::PathBuf;
-//! use warmy::{FSKey, Load, Loaded, LogicalKey, Res, Store, StoreOpt, Storage};
+//! use std::path::Path;
+//! use warmy::{Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
+//!
+//! // Possible errors that might happen.
+//! #[derive(Debug)]
+//! enum Error {
+//!   CannotLoadFromFS,
+//!   CannotLoadFromLogical,
+//!   IOError(io::Error)
+//! }
+//!
+//! impl fmt::Display for Error {
+//!   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+//!     match *self {
+//!       Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+//!       Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+//!       Error::IOError(ref e) => write!(f, "IO error: {}", e),
+//!     }
+//!   }
+//! }
 //!
 //! // The resource we want to take from a file.
 //! struct FromFS(String);
 //!
-//! impl<C> Load<C> for FromFS {
-//!   type Key = FSKey;
-//!
-//!   type Error = io::Error;
+//! impl<C> Load<C, SimpleKey> for FromFS {
+//!   type Error = Error;
 //!
 //!   fn load(
-//!     key: Self::Key,
-//!     storage: &mut Storage<C>,
+//!     key: SimpleKey,
+//!     storage: &mut Storage<C, SimpleKey>,
 //!     _: &mut C
-//!   ) -> Result<Loaded<Self>, Self::Error> {
-//!     let mut fh = File::open(key.as_path())?;
-//!     let mut s = String::new();
-//!     fh.read_to_string(&mut s);
+//!   ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+//!     // as we only accept filesystem here, we’ll ensure the key is a filesystem one
+//!     match key {
+//!       SimpleKey::Path(path) => {
+//!         let mut fh = File::open(path).map_err(Error::IOError)?;
+//!         let mut s = String::new();
+//!         fh.read_to_string(&mut s);
 //!
-//!     Ok(FromFS(s).into())
+//!         Ok(FromFS(s).into())
+//!       }
+//!
+//!       SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
+//!     }
 //!   }
 //! }
 //!
 //! fn main() {
 //!   // we don’t need a context, so we’re using this mutable reference to unit
 //!   let ctx = &mut ();
-//!   let mut store: Store<()> = Store::new(StoreOpt::default()).expect("store creation");
+//!   let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).expect("store creation");
 //!
-//!   let my_resource = store.get::<_, FromFS>(&FSKey::new("/foo/bar/zoo.json"), ctx);
+//!   let my_resource = store.get::<FromFS>(&Path::new("/foo/bar/zoo.json").into(), ctx);
 //!
 //!   // …
 //!
 //!   // imagine that you’re in an event loop now and the resource has changed
-//!   store.sync(ctx); // synchronize all resources (e.g. my_resource) with the filesystem
+//!   store.sync(ctx); // synchronize all resources (e.g. my_resource)
 //! }
 //! ```
 //!
@@ -278,8 +293,7 @@
 //! having to re-run your application. This is done via two items:
 //!
 //!   - `Load::reload`, a method called whenever an object must be reloaded.
-//!   - `Store::sync`, a method to synchronize a [`Store`] with the part of the filesystem it’s
-//!     responsible for.
+//!   - `Store::sync`, a method to synchronize a [`Store`].
 //!
 //! The `Load::reload` function is very straight-forward: it’s called when the resource changes.
 //! This situation happens:
@@ -303,8 +317,27 @@
 //! instance:
 //!
 //! ```
+//! use std::fmt;
 //! use std::io;
-//! use warmy::{Inspect, Load, Loaded, LogicalKey, Storage};
+//! use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
+//!
+//! // Possible errors that might happen.
+//! #[derive(Debug)]
+//! enum Error {
+//!   CannotLoadFromFS,
+//!   CannotLoadFromLogical,
+//!   IOError(io::Error)
+//! }
+//!
+//! impl fmt::Display for Error {
+//!   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+//!     match *self {
+//!       Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+//!       Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+//!       Error::IOError(ref e) => write!(f, "IO error: {}", e),
+//!     }
+//!   }
+//! }
 //!
 //! struct Foo;
 //!
@@ -312,16 +345,14 @@
 //!   nb_res_loaded: usize
 //! }
 //!
-//! impl<C> Load<C> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
-//!   type Key = LogicalKey;
-//!
-//!   type Error = io::Error;
+//! impl<C> Load<C, SimpleKey> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
+//!   type Error = Error; 
 //!
 //!   fn load(
-//!     key: Self::Key,
-//!     storage: &mut Storage<C>,
+//!     key: SimpleKey,
+//!     storage: &mut Storage<C, SimpleKey>,
 //!     ctx: &mut C
-//!   ) -> Result<Loaded<Self>, Self::Error> {
+//!   ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
 //!     Self::inspect(ctx).nb_res_loaded += 1; // magic happens here!
 //!
 //!     Ok(Foo.into())
@@ -331,10 +362,10 @@
 //! fn main() {
 //!   use warmy::{Res, Store, StoreOpt};
 //!
-//!   let mut store: Store<Ctx> = Store::new(StoreOpt::default()).unwrap();
+//!   let mut store: Store<Ctx, SimpleKey> = Store::new(StoreOpt::default()).unwrap();
 //!   let mut ctx = Ctx { nb_res_loaded: 0 };
 //!
-//!   let r: Res<Foo> = store.get(&LogicalKey::new("test-0"), &mut ctx).unwrap();
+//!   let r: Res<Foo> = store.get(&"test-0".into(), &mut ctx).unwrap();
 //! }
 //! ```
 //!
@@ -344,8 +375,27 @@
 //! implementation of [`Inspect`] for your types:
 //!
 //! ```
+//! use std::fmt;
 //! use std::io;
-//! use warmy::{Inspect, Load, Loaded, LogicalKey, Storage};
+//! use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
+//!
+//! // Possible errors that might happen.
+//! #[derive(Debug)]
+//! enum Error {
+//!   CannotLoadFromFS,
+//!   CannotLoadFromLogical,
+//!   IOError(io::Error)
+//! }
+//!
+//! impl fmt::Display for Error {
+//!   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+//!     match *self {
+//!       Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+//!       Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+//!       Error::IOError(ref e) => write!(f, "IO error: {}", e),
+//!     }
+//!   }
+//! }
 //!
 //! struct Foo;
 //!
@@ -362,16 +412,14 @@
 //! }
 //!
 //! // notice the usize instead of Ctx here
-//! impl<C> Load<C> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut usize> {
-//!   type Key = LogicalKey;
-//!
-//!   type Error = io::Error;
+//! impl<C> Load<C, SimpleKey> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut usize> {
+//!   type Error = Error;
 //!
 //!   fn load(
-//!     key: Self::Key,
-//!     storage: &mut Storage<C>,
+//!     key: SimpleKey,
+//!     storage: &mut Storage<C, SimpleKey>,
 //!     ctx: &mut C
-//!   ) -> Result<Loaded<Self>, Self::Error> {
+//!   ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
 //!     *Self::inspect(ctx) += 1; // direct access to the counter
 //!
 //!     Ok(Foo.into())
@@ -393,12 +441,12 @@
 //!
 //! Resource discovery is available via a simple mechanism: every time a new resource is available
 //! on the filesystem, a closure of your choice is called. This closure is passed the [`Storage`]
-//! of your [`Store`] as long as its associated context, enabling you to insert new resources on
+//! of your [`Store`] along with its associated context, enabling you to insert new resources on
 //! the fly.
 //!
 //! This is a bit different than the first option: this enables you to populate the store with
-//! resource you don’t know yet – e.g. a texture is saved in the store’s root and gets automatically
-//! added and reacted to.
+//! resources you don’t know yet – e.g. a texture is saved in the store’s root and gets
+//! automatically added and reacted to.
 //!
 //! The feature is available via the [`StoreOpt`] object you have to create prior to generating a
 //! new [`Store`]. See the `StoreOpt::set_discovery` and `StoreOpt::discovery` functions for further
@@ -419,6 +467,6 @@ pub mod methods;
 pub mod res;
 
 pub use context::Inspect;
-pub use key::{DepKey, FSKey, Key, LogicalKey};
+pub use key::{Key, SimpleKey};
 pub use load::{Discovery, Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
 pub use res::Res;
