@@ -147,7 +147,6 @@ impl<T> hash::Hash for PrivateKey<T> {
 }
 
 impl<T> CacheKey for PrivateKey<T>
-where T: 'static
-{
+where T: 'static {
   type Target = Res<T>;
 }
