@@ -1,11 +1,29 @@
+extern crate tempdir;
 extern crate warmy;
 
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
-use warmy::{FSKey, Inspect, Load, Loaded, LogicalKey, Res, Storage, Store};
+use std::path::Path;
+use tempdir::TempDir;
+use warmy::{Inspect, Load, Loaded, Res, SimpleKey, Storage, Store};
 
-mod utils;
+fn with_tmp_dir<F, B>(f: F)
+where F: Fn(&Path) -> B {
+  let tmp_dir = TempDir::new("warmy").expect("create temporary directory");
+  let _ = f(tmp_dir.path());
+  tmp_dir.close().expect("close the temporary directory");
+}
+
+fn with_store<F, B, C>(f: F)
+where F: Fn(Store<C, SimpleKey>) -> B {
+  with_tmp_dir(|tmp_dir| {
+    let opt = warmy::StoreOpt::default().set_root(tmp_dir.to_owned());
+
+    let store = warmy::Store::new(opt).expect("create store");
+    f(store)
+  })
+}
 
 /// Timeout in milliseconds to wait before determining that there’s something wrong with notify.
 const QUEUE_TIMEOUT_MS: u64 = 5000; // 5s
@@ -14,45 +32,50 @@ const QUEUE_TIMEOUT_MS: u64 = 5000; // 5s
 struct Foo(String);
 
 #[derive(Debug, Eq, PartialEq)]
-struct FooErr;
+enum TestErr {
+  WrongKey(SimpleKey)
+}
 
-impl fmt::Display for FooErr {
+impl fmt::Display for TestErr {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str("Foo error!")
-  }
-}
-
-impl<C> Load<C> for Foo {
-  type Key = FSKey;
-
-  type Error = FooErr;
-
-  fn load(key: Self::Key, _: &mut Storage<C>, _: &mut C) -> Result<Loaded<Self>, Self::Error> {
-    let mut s = String::new();
-
-    {
-      let path = key.as_path();
-      eprintln!("KEY: {}", path.display());
-      let mut fh = File::open(path).unwrap();
-      let _ = fh.read_to_string(&mut s);
+    match *self {
+      TestErr::WrongKey(ref key) => write!(f, "wrong key: {}", key)
     }
-
-    let foo = Foo(s);
-
-    Ok(foo.into())
   }
 }
 
+impl<C> Load<C, SimpleKey> for Foo {
+  type Error = TestErr;
+
+  fn load(key: SimpleKey, _: &mut Storage<C, SimpleKey>, _: &mut C) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+    if let SimpleKey::Path(ref key) = key {
+      let mut s = String::new();
+
+      {
+        let path = key.as_path();
+        eprintln!("KEY: {}", path.display());
+        let mut fh = File::open(path).unwrap();
+        let _ = fh.read_to_string(&mut s);
+      }
+
+      let foo = Foo(s);
+
+      Ok(foo.into())
+    } else {
+      Err(TestErr::WrongKey(key))
+    }
+  }
+}
+
+// This struct has a Load implementation that is const: it doesn’t load anything from the file.
 struct Stupid;
 
 // a tricky version that doesn’t actually read the file but return something constant… it’s stupid,
 // but it’s there to test methods
-impl<C> Load<C, Stupid> for Foo {
-  type Key = FSKey;
+impl<C> Load<C, SimpleKey, Stupid> for Foo {
+  type Error = TestErr;
 
-  type Error = FooErr;
-
-  fn load(_: Self::Key, _: &mut Storage<C>, _: &mut C) -> Result<Loaded<Self>, Self::Error> {
+  fn load(_: SimpleKey, _: &mut Storage<C, SimpleKey>, _: &mut C) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
     eprintln!("hello");
     let foo = Foo("stupid".to_owned());
     Ok(foo.into())
@@ -62,21 +85,10 @@ impl<C> Load<C, Stupid> for Foo {
 #[derive(Debug, Eq, PartialEq)]
 struct Bar(String);
 
-#[derive(Debug, Eq, PartialEq)]
-struct BarErr;
+impl<C> Load<C, SimpleKey> for Bar {
+  type Error = TestErr;
 
-impl fmt::Display for BarErr {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str("Bar error!")
-  }
-}
-
-impl<C> Load<C> for Bar {
-  type Key = FSKey;
-
-  type Error = BarErr;
-
-  fn load(_: Self::Key, _: &mut Storage<C>, _: &mut C) -> Result<Loaded<Self>, Self::Error> {
+  fn load(_: SimpleKey, _: &mut Storage<C, SimpleKey>, _: &mut C) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
     let bar = Bar("bar".to_owned());
     Ok(bar.into())
   }
@@ -85,75 +97,60 @@ impl<C> Load<C> for Bar {
 #[derive(Debug, Eq, PartialEq)]
 struct Zoo(String);
 
-#[derive(Debug, Eq, PartialEq)]
-struct ZooErr;
+impl<C> Load<C, SimpleKey> for Zoo {
+  type Error = TestErr;
 
-impl fmt::Display for ZooErr {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str("Zoo error!")
-  }
-}
+  fn load(key: SimpleKey, _: &mut Storage<C, SimpleKey>, _: &mut C) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+    if let SimpleKey::Logical(key) = key {
+      let content = key.as_str().to_owned();
+      let zoo = Zoo(content);
 
-impl<C> Load<C> for Zoo {
-  type Key = LogicalKey;
-
-  type Error = ZooErr;
-
-  fn load(key: Self::Key, _: &mut Storage<C>, _: &mut C) -> Result<Loaded<Self>, Self::Error> {
-    let content = key.as_str().to_owned();
-    let zoo = Zoo(content);
-
-    Ok(zoo.into())
+      Ok(zoo.into())
+    } else {
+      Err(TestErr::WrongKey(key))
+    }
   }
 }
 
 #[derive(Debug, Eq, PartialEq)]
 struct LogicalFoo(String);
 
-#[derive(Debug, Eq, PartialEq)]
-struct LogicalFooErr;
-
-impl fmt::Display for LogicalFooErr {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str("Logical Foo error!")
-  }
-}
-
-impl<C> Load<C> for LogicalFoo {
-  type Key = LogicalKey;
-
-  type Error = LogicalFooErr;
+impl<C> Load<C, SimpleKey> for LogicalFoo {
+  type Error = TestErr;
 
   fn load(
-    key: Self::Key,
-    storage: &mut Storage<C>,
+    key: SimpleKey,
+    storage: &mut Storage<C, SimpleKey>,
     ctx: &mut C,
-  ) -> Result<Loaded<Self>, Self::Error>
-  {
-    let fs_key = FSKey::new(key.as_str());
-    let foo: Res<Foo> = storage.get(&fs_key, ctx).unwrap();
+  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+    if let SimpleKey::Logical(key) = key {
+      let fs_key = Path::new(&key).into();
+      let foo: Res<Foo> = storage.get(&fs_key, ctx).unwrap();
 
-    let content = foo.borrow().0.clone();
-    let zoo = LogicalFoo(content);
+      let content = foo.borrow().0.clone();
+      let zoo = LogicalFoo(content);
 
-    let r = Loaded::with_deps(zoo, vec![fs_key.into()]);
-    Ok(r)
+      let r = Loaded::with_deps(zoo, vec![fs_key]);
+      Ok(r)
+    } else {
+      Err(TestErr::WrongKey(key))
+    }
   }
 }
 
 #[test]
 fn create_store() {
-  utils::with_store(|_: Store<()>| {})
+  with_store(|_: Store<(), SimpleKey>| {})
 }
 
 #[test]
 fn witness_sync() {
-  utils::with_store(|mut store| {
+  with_store(|mut store| {
     let ctx = &mut ();
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
 
-    let key = FSKey::new("foo.txt");
+    let key = Path::new("foo.txt").into();
     let path = store.root().join("foo.txt");
 
     {
@@ -192,12 +189,12 @@ fn witness_sync() {
 
 #[test]
 fn vfs_leading_slash() {
-  utils::with_store(|mut store| {
+  with_store(|mut store| {
     let ctx = &mut ();
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
 
-    let key = FSKey::new("/foo.txt");
+    let key = Path::new("/foo.txt").into();
     let path = store.root().join("foo.txt");
 
     {
@@ -236,9 +233,9 @@ fn vfs_leading_slash() {
 
 #[test]
 fn two_same_paths_diff_types() {
-  utils::with_store(|mut store| {
+  with_store(|mut store| {
     let ctx = &mut ();
-    let foo_key = FSKey::new("a.txt");
+    let foo_key: SimpleKey = Path::new("a.txt").into();
     let bar_key = foo_key.clone();
     let path = store.root().join("a.txt");
 
@@ -258,8 +255,8 @@ fn two_same_paths_diff_types() {
 
 #[test]
 fn logical_resource() {
-  utils::with_store(|mut store| {
-    let key = LogicalKey::new("mem/uid/32197");
+  with_store(|mut store| {
+    let key = "mem/uid/32197".into();
     let zoo: Res<Zoo> = store.get(&key, &mut ()).unwrap();
     assert_eq!(zoo.borrow().0.as_str(), "mem/uid/32197");
   })
@@ -267,12 +264,12 @@ fn logical_resource() {
 
 #[test]
 fn logical_with_deps() {
-  utils::with_store(|mut store| {
+  with_store(|mut store| {
     let ctx = &mut ();
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
 
-    let foo_key = FSKey::new("foo.txt");
+    let foo_key = Path::new("foo.txt").into();
     let path = store.root().join("foo.txt");
 
     {
@@ -284,7 +281,7 @@ fn logical_with_deps() {
       .get(&foo_key, ctx)
       .expect("object should be present at the given key");
 
-    let log_foo_key = LogicalKey::new(foo_key.as_path().to_str().unwrap());
+    let log_foo_key = "foo.txt".into();
     let log_foo: Res<LogicalFoo> = store.get(&log_foo_key, ctx).unwrap();
 
     assert_eq!(log_foo.borrow().0.as_str(), "Hello, world!");
@@ -337,19 +334,17 @@ impl<'a> Inspect<'a, Ctx, &'a mut u32> for FooWithCtx {
   }
 }
 
-impl<C> Load<C> for FooWithCtx where Self: for<'a> Inspect<'a, C, &'a mut u32> {
-  type Key = FSKey;
-
-  type Error = FooErr;
+impl<C> Load<C, SimpleKey> for FooWithCtx where Self: for<'a> Inspect<'a, C, &'a mut u32> {
+  type Error = TestErr;
 
   fn load(
-    key: Self::Key,
-    storage: &mut Storage<C>,
+    key: SimpleKey,
+    storage: &mut Storage<C, SimpleKey>,
     ctx: &mut C,
-  ) -> Result<Loaded<Self>, Self::Error>
+  ) -> Result<Loaded<Self, SimpleKey>, Self::Error>
   {
     // load as if it was a Foo
-    let Loaded { res, deps } = <Foo as Load<_, ()>>::load(key, storage, ctx)?;
+    let Loaded { res, deps } = <Foo as Load<_, _, ()>>::load(key, storage, ctx)?;
 
     // increment the counter
     *Self::inspect(ctx) += 1;
@@ -362,33 +357,22 @@ impl<C> Load<C> for FooWithCtx where Self: for<'a> Inspect<'a, C, &'a mut u32> {
 #[derive(Debug, Eq, PartialEq)]
 struct Pew;
 
-#[derive(Debug, Eq, PartialEq)]
-struct PewErr;
-
-impl fmt::Display for PewErr {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    f.write_str("Pew error!")
-  }
-}
-
 impl<'a> Inspect<'a, Ctx, &'a mut u32> for Pew {
   fn inspect(ctx: &mut Ctx) -> &mut u32 {
     &mut ctx.pew_nb
   }
 }
 
-impl<C> Load<C> for Pew
+impl<C> Load<C, SimpleKey> for Pew
 where Self: for<'a> Inspect<'a, C, &'a mut u32>,
       FooWithCtx: for<'a> Inspect<'a, C, &'a mut u32> {
-  type Key = LogicalKey;
-
-  type Error = PewErr;
+  type Error = TestErr;
 
   fn load(
-    _: Self::Key,
-    _: &mut Storage<C>,
+    _: SimpleKey,
+    _: &mut Storage<C, SimpleKey>,
     ctx: &mut C,
-  ) -> Result<Loaded<Self>, Self::Error> {
+  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
     // for the sake of the teste, just tap another resource as well
     *FooWithCtx::inspect(ctx) += 1;
 
@@ -400,13 +384,13 @@ where Self: for<'a> Inspect<'a, C, &'a mut u32>,
 
 #[test]
 fn foo_with_ctx() {
-  utils::with_store(|mut store: Store<Ctx>| {
+  with_store(|mut store| {
     let mut ctx = Ctx::new();
 
     let expected1 = "Hello, world!".to_owned();
     let expected2 = "Bye!".to_owned();
 
-    let key = FSKey::new("foo.txt");
+    let key = Path::new("foo.txt").into();
     let path = store.root().join("foo.txt");
 
     {
@@ -447,11 +431,11 @@ fn foo_with_ctx() {
 
 #[test]
 fn foo_by_stupid() {
-  utils::with_store(|mut store: Store<()>| {
+  with_store(|mut store| {
     let ctx = &mut ();
     let expected = "stupid";
 
-    let key = FSKey::new("foo.txt");
+    let key = Path::new("foo.txt").into();
     let path = store.root().join("foo.txt");
 
     {
@@ -469,10 +453,10 @@ fn foo_by_stupid() {
 
 #[test]
 fn load_two_ctx() {
-  utils::with_store(|mut store: Store<Ctx>| {
+  with_store(|mut store| {
     let mut ctx = Ctx::new();
 
-    let key = LogicalKey::new("pew");
+    let key = "pew".into();
 
     let _: Res<Pew> = store.get(&key, &mut ctx).expect("should always get a Pew");
 
