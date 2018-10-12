@@ -381,11 +381,11 @@ impl<C, K> Synchronizer<C, K> where K: Key {
   }
 
   /// Dequeue any file system events.
-  fn dequeue_fs_events(&mut self, storage: &mut Storage<C, K>, ctx: &mut C) where K: From<PathBuf> {
+  fn dequeue_fs_events(&mut self, storage: &mut Storage<C, K>, ctx: &mut C) where K: for<'a> From<&'a Path> {
     for event in self.watcher_rx.try_iter() {
       match event {
         DebouncedEvent::Write(ref path) | DebouncedEvent::Create(ref path) => {
-          let key = path.to_owned().into();
+          let key = path.as_path().into();
 
           if storage.metadata.contains_key(&key) {
             self.dirties.insert(key);
@@ -427,7 +427,7 @@ impl<C, K> Synchronizer<C, K> where K: Key {
   }
 
   /// Synchronize the `Storage` by updating the resources that ought to.
-  fn sync(&mut self, storage: &mut Storage<C, K>, ctx: &mut C) where K: From<PathBuf> {
+  fn sync(&mut self, storage: &mut Storage<C, K>, ctx: &mut C) where K: for<'a> From<&'a Path> {
     self.dequeue_fs_events(storage, ctx);
     self.reload_dirties(storage, ctx);
   }
@@ -475,7 +475,7 @@ impl<C, K> Store<C, K> where K: Key {
   }
 
   /// Synchronize the `Store` by updating the resources that ought to with a provided context.
-  pub fn sync(&mut self, ctx: &mut C) where K: From<PathBuf> {
+  pub fn sync(&mut self, ctx: &mut C) where K: for<'a> From<&'a Path> {
     self.synchronizer.sync(&mut self.storage, ctx);
   }
 }
