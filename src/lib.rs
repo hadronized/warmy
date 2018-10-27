@@ -417,6 +417,7 @@ pub mod key;
 pub mod load;
 pub mod methods;
 pub mod res;
+pub mod source;
 
 pub use context::Inspect;
 pub use key::{DepKey, FSKey, Key, LogicalKey};
