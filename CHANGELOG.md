@@ -1,3 +1,15 @@
+# 0.11
+
+> Saturday, 27th of October 2018
+
+  - Change the key system. Keys are now used as type variables in the `Load` trait in order to allow
+    for custom keys to be more easily used across an entire `Store` use through the code base. This
+    is also the first premise of a bigger change that will arrive in `0.12` or `0.13`: resource
+    sources and event collectors customization.
+  - Remove `FSKey`, `LogicalKey`, `DepKey`.
+  - Add the convenient `SimpleKey` type.
+  - Enhance the documentation.
+
 # 0.10
 
 > Sunday, 30th of September 2018
