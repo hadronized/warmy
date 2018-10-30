@@ -177,7 +177,7 @@
 //!
 //! An object of type [`Loaded`] gives information to `warmy` about your dependencies. Upon loading –
 //! i.e. your resource is successfully *loaded* – you can tell `warmy` which resources your loaded
-//! resource depends on. This is a bit tricky, though, because a diffference is important to make
+//! resource depends on. This is a bit tricky, though, because a difference is important to make
 //! there.
 //!
 //! When you implement `Load::load`, you are handed a [`Storage`]. You can use that [`Storage`] to load
