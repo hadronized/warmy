@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
-use key::{Key, PrivateKey};
-use res::Res;
+use crate::key::{Key, PrivateKey};
+use crate::res::Res;
 
 /// Class of types that can be loaded and reloaded.
 ///

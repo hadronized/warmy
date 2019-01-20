@@ -11,6 +11,8 @@ repository = "https://github.com/phaazon/warmy"
 documentation = "https://docs.rs/warmy"
 readme = "README.md"
 
+edition = "2018"
+
 [badges]
 travis-ci = { repository = "phaazon/warmy", branch = "master" }
 is-it-maintained-issue-resolution = { repository = "phaazon/warmy" }

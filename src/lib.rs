@@ -346,7 +346,7 @@
 //! }
 //!
 //! impl<C> Load<C, SimpleKey> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
-//!   type Error = Error; 
+//!   type Error = Error;
 //!
 //!   fn load(
 //!     key: SimpleKey,
@@ -457,16 +457,13 @@
 //! [methods]: methods/index.html
 //! [VFS]: https://en.wikipedia.org/wiki/Virtual_file_system
 
-extern crate any_cache;
-extern crate notify;
-
 pub mod context;
 pub mod key;
 pub mod load;
 pub mod methods;
 pub mod res;
 
-pub use context::Inspect;
-pub use key::{Key, SimpleKey};
-pub use load::{Discovery, Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
-pub use res::Res;
+pub use crate::context::Inspect;
+pub use crate::key::{Key, SimpleKey};
+pub use crate::load::{Discovery, Load, Loaded, Storage, Store, StoreError, StoreErrorOr, StoreOpt};
+pub use crate::res::Res;
