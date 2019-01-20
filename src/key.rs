@@ -6,7 +6,7 @@ use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
-use res::Res;
+use crate::res::Res;
 
 /// Class of keys recognized by `warmy`.
 pub trait Key: 'static + Clone + Eq + Hash {
