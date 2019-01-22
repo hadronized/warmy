@@ -458,6 +458,7 @@
 //! [VFS]: https://en.wikipedia.org/wiki/Virtual_file_system
 
 pub mod context;
+#[cfg(feature = "json")] pub mod json;
 pub mod key;
 pub mod load;
 pub mod methods;
