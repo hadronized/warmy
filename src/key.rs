@@ -37,9 +37,19 @@ impl<'a>  From<&'a Path> for SimpleKey {
     SimpleKey::from_path(path)
   }
 }
+
 impl From<PathBuf> for SimpleKey {
   fn from(path: PathBuf) -> Self {
     SimpleKey::Path(path)
+  }
+}
+
+impl Into<Option<PathBuf>> for SimpleKey {
+  fn into(self) -> Option<PathBuf> {
+    match self {
+      SimpleKey::Path(path) => Some(path),
+      _ => None
+    }
   }
 }
 
@@ -67,13 +77,13 @@ impl Display for SimpleKey {
 impl Key for SimpleKey {
   fn prepare_key(self, root: &Path) -> Self {
     match self {
-      SimpleKey::Path(path) => SimpleKey::Path(vfs_substite_path(&path, root)),
+      SimpleKey::Path(path) => SimpleKey::Path(vfs_substitute_path(&path, root)),
       SimpleKey::Logical(x) => SimpleKey::Logical(x),
     }
   }
 }
 /// Substitute a VFS path by a real one.
-fn vfs_substite_path(path: &Path, root: &Path) -> PathBuf {
+fn vfs_substitute_path(path: &Path, root: &Path) -> PathBuf {
   let mut components = path.components().peekable();
   let root_components = root.components();
 
