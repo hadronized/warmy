@@ -1,3 +1,9 @@
+//! JSON universal implementors.
+//!
+//! This module provides you with universal implementation for any type that implements [`serde::Deserialize`].
+//!
+//! [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
+
 use serde::Deserialize;
 use serde_json::{self, from_reader};
 use std::io;
@@ -8,13 +14,19 @@ use std::path::PathBuf;
 use crate::key::Key;
 use crate::load::{Load, Loaded, Storage};
 
+/// The JSON universal method. Use this with `Store::get_by` or `Store::get_proxied_by` to benefit
+/// from the automatic implementors.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Json;
 
+/// Possible error that might occur while loading and reloading JSON formatted scarce resources.
 #[derive(Debug)]
 pub enum JsonError {
+  /// An error in `serde_json`.
   JsonError(serde_json::Error),
+  /// The file specified by the key failed to open.
   CannotOpenFile(PathBuf, io::Error),
+  /// The input key doesn’t provide enough information to open a file.
   NoKey
 }
 
@@ -54,4 +66,3 @@ where K: Key + Into<Option<PathBuf>>,
     }
   }
 }
-

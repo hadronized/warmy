@@ -1,5 +1,20 @@
 //! Hot-reloading, loadable and reloadable resources.
 //!
+//!
+//! * [Foreword](#foreword)
+//! * [Loading a resource](#loading-a-resource)
+//!   * [Store](#store)
+//!   * [The `Key` type variable](#the-key-type-variable)
+//!     * [Special case: simple keys](#special-case-simple-keys)
+//!   * [The `Load::Error` associated type](#the-loaderror-associated-type)
+//!   * [The `Load::load` method](#the-loadload-method)
+//!   * [Express your dependencies with Loaded](#express-your-dependencies-with-loaded)
+//!   * [Let’s get some things!](#let’s-get-some-things)
+//! * [Reloading a resource](#reloading-a-resource)
+//! * [Context inspection](#context-inspection)
+//! * [Load methods](#load-methods)
+//!   * [Universal JSON support](#universal-json-support)
+//! * [Resource discovery](#resource-discovery)
 //! # Foreword
 //!
 //! Resources are objects that live in a store and can be hot-reloaded – i.e. they can change
@@ -25,10 +40,11 @@
 //! four items:
 //!
 //!   - The [`Store`], which holds and caches resources.
-//!   - The `Key` type variable, used to tell `warmy` which kind of resource your store knows how to
-//!     represent and what information the key must contain.
-//!   - The `Load::Error` associated type, that is the error type used when loading fails.
-//!   - The `Load::load` method, which is the method called to load your resource in a given store.
+//!   - The [`Key`] type variable, used to tell `warmy` which kind of resource your store knows how
+//!     to represent and what information the key must contain.
+//!   - The [`Load::Error`] associated type, that is the error type used when loading fails.
+//!   - The [`Load::load`] method, which is the method called to load your resource in a given
+//!     store.
 //!
 //! ## Store
 //!
@@ -85,9 +101,9 @@
 //! > On a general note, you should always try to stick to precise and accurate errors types. Avoid
 //! > simple types such as `String` or `u64` and prefer to use detailed, algebraic datatypes.
 //!
-//! ## The `Load::load` method
+//! ## The [`Load::load`] method
 //!
-//! This is the entry-point method. `Load::load` must be implemented in order for `warmy` to know
+//! This is the entry-point method. [`Load::load`] must be implemented in order for `warmy` to know
 //! how to read the resource. Let’s implement it for two types: one that represents a resource on
 //! the filesystem, one computed from memory.
 //!
@@ -180,9 +196,9 @@
 //! resource depends on. This is a bit tricky, though, because a difference is important to make
 //! there.
 //!
-//! When you implement `Load::load`, you are handed a [`Storage`]. You can use that [`Storage`] to load
-//! additional resources and gather them in your resources. When those additional resources get
-//! reloaded, if you directly embed the resources in your object, you will automatically see the
+//! When you implement [`Load::load`], you are handed a [`Storage`]. You can use that [`Storage`]
+//! to load additional resources and gather them in your resources. When those additional resources
+//! get reloaded, if you directly embed the resources in your object, you will automatically see the
 //! automated resources – that is the whole point of this crate! However, if you don’t express a
 //! *dependency relationship* to those resources, your former resource will not reload – it will
 //! just use automatically-synced resources, but it will not reload itself. This is a bit touchy
@@ -192,9 +208,9 @@
 //!   1. You want to load an object that is represented by aggregation of several values /
 //!      resources.
 //!   2. You choose to use a *logical resource* and guess all the files to load from.
-//!   3. When you implement `Load::load`, you open several files, load them into memory, compose
+//!   3. When you implement [`Load::load`], you open several files, load them into memory, compose
 //!      them and finally end up with your object.
-//!   4. You return your object from `Load::load` with no dependencies (i.e. you use `.into()` on
+//!   4. You return your object from [`Load::load`] with no dependencies (i.e. you use `.into()` on
 //!      it).
 //!
 //! What is going to happen here is that if any file your resource depends on changes, since they
@@ -202,7 +218,7 @@
 //! solution there is to load those files as proper resources and put those keys in the returned
 //! [`Loaded`] object to express that you *depend on the reloading of the objects referred by these
 //! keys*. It’s a bit touchy but you will eventually find yourself in a situation when this
-//! [`Loaded`] thing will help you. You will then use `Loaded::with_deps`. See the documentation of
+//! [`Loaded`] thing will help you. You will then use [`Loaded::with_deps`]. See the documentation of
 //! [`Loaded`] for further information.
 //!
 //! > Fun fact: logical resources were introduced to solve that problem along with dependency
@@ -213,14 +229,14 @@
 //! When you have implemented [`Load`], you’re set and ready to get (cached) resources. You have
 //! several functions to achieve that goal:
 //!
-//!   - `Store::get`, used to get a resource. This will effectively load it if it’s the first time
+//!   - [`Store::get`], used to get a resource. This will effectively load it if it’s the first time
 //!     it’s asked. If it’s not, it will use a cached version.
-//!   - `Store::get_proxied`, a special version of `Store::get`. If the initial loading (non-cached)
-//!     fails to load (missing resource, fail to parse, whatever), a *proxy* will be used – passed
-//!     in to `Store::get_proxied`. This value is lazy though, so if the loading succeeds, that
-//!     value won’t ever be evaluated.
+//!   - [`Store::get_proxied`], a special version of [`Store::get`]. If the initial loading
+//!     (non-cached) fails to load (missing resource, fail to parse, whatever), a *proxy* will be
+//!     used – passed in to [`Store::get_proxied`]. This value is lazy though, so if the loading
+//!     succeeds, that value won’t ever be evaluated.
 //!
-//! Let’s focus on `Store::get` for this tutorial.
+//! Let’s focus on [`Store::get`] for this tutorial.
 //!
 //! ```
 //! use std::fmt;
@@ -292,16 +308,16 @@
 //! Most of the interesting concept of `warmy` is to enable you to hot-reload resources without
 //! having to re-run your application. This is done via two items:
 //!
-//!   - `Load::reload`, a method called whenever an object must be reloaded.
-//!   - `Store::sync`, a method to synchronize a [`Store`].
+//!   - [`Load::reload`], a method called whenever an object must be reloaded.
+//!   - [`Store::sync`], a method to synchronize a [`Store`].
 //!
-//! The `Load::reload` function is very straight-forward: it’s called when the resource changes.
+//! The [`Load::reload`] function is very straight-forward: it’s called when the resource changes.
 //! This situation happens:
 //!
 //!   - Either when the resource is on the filesystem (the file changes).
 //!   - Or if it’s a dependent resource of one that has reloaded.
 //!
-//! See the documentation of `Load::reload` for further details.
+//! See the documentation of [`Load::reload`] for further details.
 //!
 //! # Context inspection
 //!
@@ -370,8 +386,8 @@
 //! ```
 //!
 //! In this example, because the context value we want is the same as the [`Store`]’s context, a
-//! universal implementor of [`Inspect`] enables you to directly `inspect` the context. However, if
-//! you wanted to inspect it more precisely, like with `&mut usize`, you would need to write an
+//! universal implementor of [`Inspect`] enables you to directly [`inspect`] the context. However,
+//! if you wanted to inspect it more precisely, like with `&mut usize`, you would need to write an
 //! implementation of [`Inspect`] for your types:
 //!
 //! ```
@@ -430,12 +446,75 @@
 //! # Load methods
 //!
 //! `warmy` supports load methods. Those are used to specify several ways to load an object of a
-//! given type. By default, [`Load`] is implemented with the *default method* – which is `()`. If you
-//! want more methods, you can set the type parameter to something else when implementing [`Load`].
+//! given type. By default, [`Load`] is implemented with the *default method* – which is `()`. If
+//! you want more methods, you can set the type parameter to something else when implementing
+//! [`Load`].
 //!
-//! You can also find several [methods] centralized in here, but you definitely don’t have to use
-//! them. In theory, those will be removed and placed into other crates to add automatic
-//! implementations.
+//! You can also find several *methods* centralized in here, but you definitely don’t have to use
+//! them.
+//!
+//! ## Universal JSON support
+//!
+//! The crate supports *universal JSON implementation*. You can use it via the
+//! [`Json`] type.
+//!
+//! > Universal JSON support is feature-gated with `"json"`.
+//!
+//! Universal JSON can help and make your life and implementations easier. Basically, it means that
+//! any type that implements [`serde::Deserialize`] can be loaded and hot-reloaded by `warmy`
+//! with zero boilerplate from your side, just by asking `warmy` to get the given scarse resource.
+//! This is done with the [`Store::get_by`] or [`Store::get_proxied_by`] methods.
+//!
+//! ```
+//! use serde::Deserialize;
+//! use warmy::{Res, SimpleKey, Store, StoreOpt};
+//! use warmy::json::Json;
+//! use std::thread::sleep;
+//! use std::time::Duration;
+//!
+//! #[derive(Debug, Deserialize)]
+//! #[serde(rename_all = "snake_case")]
+//! struct Dog {
+//!   name: String,
+//!   gender: Gender
+//! }
+//!
+//! impl Default for Dog {
+//!   fn default() -> Self {
+//!     Dog {
+//!       name: "Norbert".to_owned(),
+//!       gender: Gender::Male
+//!     }
+//!   }
+//! }
+//!
+//! #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+//! #[serde(rename_all = "snake_case")]
+//! enum Gender {
+//!   Female,
+//!   Male
+//! }
+//!
+//! fn main() {
+//!   let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).unwrap();
+//!   let ctx = &mut ();
+//!
+//!   let resource: Result<Res<Dog>, _> = store.get_by(&SimpleKey::from_path("/dog.json"), ctx, Json);
+//!
+//!   match resource {
+//!     Ok(dog) => {
+//!       loop {
+//!         store.sync(ctx);
+//!
+//!         println!("Dog is {} and is a {:?}", dog.borrow().name, dog.borrow().gender);
+//!         sleep(Duration::from_millis(1000));
+//!       }
+//!     }
+//!
+//!     Err(e) => eprintln!("{}", e)
+//!   }
+//! }
+//! ```
 //!
 //! # Resource discovery
 //!
@@ -449,19 +528,39 @@
 //! automatically added and reacted to.
 //!
 //! The feature is available via the [`StoreOpt`] object you have to create prior to generating a
-//! new [`Store`]. See the `StoreOpt::set_discovery` and `StoreOpt::discovery` functions for further
-//! details on how to use the resource discovery mechanism.
+//! new [`Store`]. See the [`StoreOpt::set_discovery`] and [`StoreOpt::discovery`] functions for
+//! further details on how to use the resource discovery mechanism.
 //!
 //! [serde-json]: https://crates.io/crates/serde_json
 //! [serde_json::Error]: https://docs.serde.rs/serde_json/struct.Error.html
-//! [methods]: methods/index.html
 //! [VFS]: https://en.wikipedia.org/wiki/Virtual_file_system
+//! [`Key`]: load/trait.Key.html
+//! [`Load`]: load/trait.Load.html
+//! [`Load::Error`]: load/trait.Load.html#associatedtype.Error
+//! [`Load::load`]: load/trait.Load.html#tymethod.load
+//! [`Load::reload`]: load/trait.Load.html#tymethod.reload
+//! [`Loaded`]: load/struct.Loaded.html
+//! [`Loaded::with_deps`]: load/struct.Loaded.html#method.with_deps
+//! [`Json`]: json/struct.Json.html
+//! [`Storage`]: load/struct.Storage.html
+//! [`Store`]: load/struct.Store.html
+//! [`Store::get`]: load/struct.Store.html#method.get
+//! [`Store::get_by`]: load/struct.Store.html#method.get_by
+//! [`Store::get_proxied`]: load/struct.Store.html#method.get_proxied
+//! [`Store::get_proxied_by`]: load/struct.Store.html#method.get_proxied_by
+//! [`Store::sync`]: load/struct.Store.html#method.sync
+//! [`StoreOpt`]: load/struct.StoreOpt.html
+//! [`StoreOpt::set_discovery`]: load/struct.StoreOpt.html#method.set_discovery
+//! [`StoreOpt::discovery`]: load/struct.StoreOpt.html#method.discovery
+//! [`SimpleKey`]: key/enum.SimpleKey.html
+//! [`Inspect`]: context/trait.Inspect.html
+//! [`inspect`]: context/trait.Inspect.html#tymethod.inspect
+//! [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
 
 pub mod context;
 #[cfg(feature = "json")] pub mod json;
 pub mod key;
 pub mod load;
-pub mod methods;
 pub mod res;
 
 pub use crate::context::Inspect;
