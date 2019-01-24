@@ -1,3 +1,9 @@
+## 0.11.1
+
+> Thu Jan 24th 2019
+
+  - Add universal JSON support (via **serde**).
+
 # 0.11
 
 > Saturday, 27th of October 2018
