@@ -6,21 +6,23 @@
 [![docs.rs](https://docs.rs/warmy/badge.svg)](https://docs.rs/warmy)
 ![License](https://img.shields.io/badge/license-BSD3-blue.svg?style=flat)
 
+<!-- cargo-sync-readme start -->
+
 Hot-reloading, loadable and reloadable resources.
 
 * [Foreword](#foreword)
 * [Loading a resource](#loading-a-resource)
-  * [Store](#store)
-  * [The `Key` type variable](#the-key-type-variable)
-    * [Special case: simple keys](#special-case-simple-keys)
-  * [The `Load::Error` associated type](#the-loaderror-associated-type)
-  * [The `Load::load` method](#the-loadload-method)
-  * [Express your dependencies with Loaded](#express-your-dependencies-with-loaded)
-  * [Let’s get some things!](#let’s-get-some-things)
+* [Store](#store)
+* [The `Key` type variable](#the-key-type-variable)
+* [Special case: simple keys](#special-case-simple-keys)
+* [The `Load::Error` associated type](#the-loaderror-associated-type)
+* [The `Load::load` method](#the-loadload-method)
+* [Express your dependencies with Loaded](#express-your-dependencies-with-loaded)
+* [Let’s get some things!](#let’s-get-some-things)
 * [Reloading a resource](#reloading-a-resource)
 * [Context inspection](#context-inspection)
 * [Load methods](#load-methods)
-  * [Universal JSON support](#universal-json-support)
+* [Universal JSON support](#universal-json-support)
 * [Resource discovery](#resource-discovery)
 
 # Foreword
@@ -28,10 +30,10 @@ Hot-reloading, loadable and reloadable resources.
 Resources are objects that live in a store and can be hot-reloaded – i.e. they can change
 without you interacting with them. There are currently two types of resources supported:
 
-  - **Filesystem resources**, which are resources that live on the filesystem and have a real
-    representation (i.e. a *file* for short).
-  - **Logical resources**, which are resources that are computed and don’t directly require any
-    I/O.
+- **Filesystem resources**, which are resources that live on the filesystem and have a real
+representation (i.e. a *file* for short).
+- **Logical resources**, which are resources that are computed and don’t directly require any
+I/O.
 
 Resources are referred to by *keys*. A *key* is a typed index that contains enough information
 to uniquely identify a resource living in a store.
@@ -47,12 +49,12 @@ loading is implemented *per-type*: this means you have to implement a trait on a
 any object of that type can be loaded. The trait to implement is [`Load`]. We’re interested in
 four items:
 
-  - The [`Store`], which holds and caches resources.
-  - The [`Key`] type variable, used to tell `warmy` which kind of resource your store knows how
-    to represent and what information the key must contain.
-  - The [`Load::Error`] associated type, that is the error type used when loading fails.
-  - The [`Load::load`] method, which is the method called to load your resource in a given
-    store.
+- The [`Store`], which holds and caches resources.
+- The [`Key`] type variable, used to tell `warmy` which kind of resource your store knows how
+to represent and what information the key must contain.
+- The [`Load::Error`] associated type, that is the error type used when loading fails.
+- The [`Load::load`] method, which is the method called to load your resource in a given
+store.
 
 ## Store
 
@@ -61,17 +63,17 @@ A [`Store`] is responsible for holding and caching resources. Each [`Store`] is 
 [`Store`] by giving it a [`StoreOpt`], which is used to customize the [`Store`] – if you don’t
 need it nor care about it for the moment, just use `Store::default`.
 
-```rust
+```
 use warmy::{SimpleKey, Store, StoreOpt};
 
 let res = Store::<(), SimpleKey>::new(StoreOpt::default());
 
 match res {
-  Err(e) => {
-    eprintln!("unable to create the store: {}", e);
-  }
+Err(e) => {
+eprintln!("unable to create the store: {}", e);
+}
 
-  Ok(store) => ()
+Ok(store) => ()
 }
 ```
 
@@ -115,7 +117,7 @@ This is the entry-point method. [`Load::load`] must be implemented in order for 
 how to read the resource. Let’s implement it for two types: one that represents a resource on
 the filesystem, one computed from memory.
 
-```rust
+```
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
@@ -124,19 +126,19 @@ use warmy::{Load, Loaded, SimpleKey, Storage};
 // Possible errors that might happen.
 #[derive(Debug)]
 enum Error {
-  CannotLoadFromFS,
-  CannotLoadFromLogical,
-  IOError(io::Error)
+CannotLoadFromFS,
+CannotLoadFromLogical,
+IOError(io::Error)
 }
 
 impl fmt::Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
-      Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
-      Error::IOError(ref e) => write!(f, "IO error: {}", e),
-    }
-  }
+fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+match *self {
+Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+Error::IOError(ref e) => write!(f, "IO error: {}", e),
+}
+}
 }
 
 // The resource we want to take from a file.
@@ -146,56 +148,56 @@ struct FromFS(String);
 struct FromMem(usize);
 
 impl<C> Load<C, SimpleKey> for FromFS {
-  type Error = Error;
+type Error = Error;
 
-  fn load(
-    key: SimpleKey,
-    storage: &mut Storage<C, SimpleKey>,
-    _: &mut C
-  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
-    // as we only accept filesystem here, we’ll ensure the key is a filesystem one
-    match key {
-      SimpleKey::Path(path) => {
-        let mut fh = File::open(path).map_err(Error::IOError)?;
-        let mut s = String::new();
-        fh.read_to_string(&mut s);
+fn load(
+key: SimpleKey,
+storage: &mut Storage<C, SimpleKey>,
+_: &mut C
+) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+// as we only accept filesystem here, we’ll ensure the key is a filesystem one
+match key {
+SimpleKey::Path(path) => {
+let mut fh = File::open(path).map_err(Error::IOError)?;
+let mut s = String::new();
+fh.read_to_string(&mut s);
 
-        Ok(FromFS(s).into())
-      }
+Ok(FromFS(s).into())
+}
 
-      SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
-    }
-  }
+SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
+}
+}
 }
 
 impl<C> Load<C, SimpleKey> for FromMem {
-  type Error = Error;
+type Error = Error;
 
-  fn load(
-    key: SimpleKey,
-    storage: &mut Storage<C, SimpleKey>,
-    _: &mut C
-  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
-    // ensure we only accept logical resources
-    match key {
-      SimpleKey::Logical(key) => {
-        // this is a bit dummy, but why not?
-        Ok(FromMem(key.len()).into())
-      }
+fn load(
+key: SimpleKey,
+storage: &mut Storage<C, SimpleKey>,
+_: &mut C
+) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+// ensure we only accept logical resources
+match key {
+SimpleKey::Logical(key) => {
+// this is a bit dummy, but why not?
+Ok(FromMem(key.len()).into())
+}
 
-      SimpleKey::Path(_) => Err(Error::CannotLoadFromFS)
-    }
-  }
+SimpleKey::Path(_) => Err(Error::CannotLoadFromFS)
+}
+}
 }
 ```
 
 As you can see here, there’re a few new concepts:
 
-  - [`Loaded`]: A type you have to wrap your object in to express dependencies. Because it
-    implements `From<T> for Loaded<T>`, you can use `.into()` to state you don’t have any
-    dependencies.
-  - [`Storage`]: This is the minimal structure that holds and caches your resources. A [`Store`]
-    is actually the *interface structure* you will handle in your client code.
+- [`Loaded`]: A type you have to wrap your object in to express dependencies. Because it
+implements `From<T> for Loaded<T>`, you can use `.into()` to state you don’t have any
+dependencies.
+- [`Storage`]: This is the minimal structure that holds and caches your resources. A [`Store`]
+is actually the *interface structure* you will handle in your client code.
 
 ## Express your dependencies with Loaded
 
@@ -213,13 +215,13 @@ just use automatically-synced resources, but it will not reload itself. This is 
 but let’s take an example of a typical situation where you might want to use dependencies and
 then dependency graphs:
 
-  1. You want to load an object that is represented by aggregation of several values /
-     resources.
-  2. You choose to use a *logical resource* and guess all the files to load from.
-  3. When you implement [`Load::load`], you open several files, load them into memory, compose
-     them and finally end up with your object.
-  4. You return your object from [`Load::load`] with no dependencies (i.e. you use `.into()` on
-     it).
+1. You want to load an object that is represented by aggregation of several values /
+resources.
+2. You choose to use a *logical resource* and guess all the files to load from.
+3. When you implement [`Load::load`], you open several files, load them into memory, compose
+them and finally end up with your object.
+4. You return your object from [`Load::load`] with no dependencies (i.e. you use `.into()` on
+it).
 
 What is going to happen here is that if any file your resource depends on changes, since they
 don’t have a proper resource in the store, your object will see nothing. A typical
@@ -237,16 +239,16 @@ keys*. It’s a bit touchy but you will eventually find yourself in a situation 
 When you have implemented [`Load`], you’re set and ready to get (cached) resources. You have
 several functions to achieve that goal:
 
-  - [`Store::get`], used to get a resource. This will effectively load it if it’s the first time
-    it’s asked. If it’s not, it will use a cached version.
-  - [`Store::get_proxied`], a special version of [`Store::get`]. If the initial loading
-    (non-cached) fails to load (missing resource, fail to parse, whatever), a *proxy* will be
-    used – passed in to [`Store::get_proxied`]. This value is lazy though, so if the loading
-    succeeds, that value won’t ever be evaluated.
+- [`Store::get`], used to get a resource. This will effectively load it if it’s the first time
+it’s asked. If it’s not, it will use a cached version.
+- [`Store::get_proxied`], a special version of [`Store::get`]. If the initial loading
+(non-cached) fails to load (missing resource, fail to parse, whatever), a *proxy* will be
+used – passed in to [`Store::get_proxied`]. This value is lazy though, so if the loading
+succeeds, that value won’t ever be evaluated.
 
 Let’s focus on [`Store::get`] for this tutorial.
 
-```rust
+```
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
@@ -256,58 +258,58 @@ use warmy::{Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
 // Possible errors that might happen.
 #[derive(Debug)]
 enum Error {
-  CannotLoadFromFS,
-  CannotLoadFromLogical,
-  IOError(io::Error)
+CannotLoadFromFS,
+CannotLoadFromLogical,
+IOError(io::Error)
 }
 
 impl fmt::Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
-      Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
-      Error::IOError(ref e) => write!(f, "IO error: {}", e),
-    }
-  }
+fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+match *self {
+Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+Error::IOError(ref e) => write!(f, "IO error: {}", e),
+}
+}
 }
 
 // The resource we want to take from a file.
 struct FromFS(String);
 
 impl<C> Load<C, SimpleKey> for FromFS {
-  type Error = Error;
+type Error = Error;
 
-  fn load(
-    key: SimpleKey,
-    storage: &mut Storage<C, SimpleKey>,
-    _: &mut C
-  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
-    // as we only accept filesystem here, we’ll ensure the key is a filesystem one
-    match key {
-      SimpleKey::Path(path) => {
-        let mut fh = File::open(path).map_err(Error::IOError)?;
-        let mut s = String::new();
-        fh.read_to_string(&mut s);
+fn load(
+key: SimpleKey,
+storage: &mut Storage<C, SimpleKey>,
+_: &mut C
+) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+// as we only accept filesystem here, we’ll ensure the key is a filesystem one
+match key {
+SimpleKey::Path(path) => {
+let mut fh = File::open(path).map_err(Error::IOError)?;
+let mut s = String::new();
+fh.read_to_string(&mut s);
 
-        Ok(FromFS(s).into())
-      }
+Ok(FromFS(s).into())
+}
 
-      SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
-    }
-  }
+SimpleKey::Logical(_) => Err(Error::CannotLoadFromLogical)
+}
+}
 }
 
 fn main() {
-  // we don’t need a context, so we’re using this mutable reference to unit
-  let ctx = &mut ();
-  let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).expect("store creation");
+// we don’t need a context, so we’re using this mutable reference to unit
+let ctx = &mut ();
+let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).expect("store creation");
 
-  let my_resource = store.get::<FromFS>(&Path::new("/foo/bar/zoo.json").into(), ctx);
+let my_resource = store.get::<FromFS>(&Path::new("/foo/bar/zoo.json").into(), ctx);
 
-  // …
+// …
 
-  // imagine that you’re in an event loop now and the resource has changed
-  store.sync(ctx); // synchronize all resources (e.g. my_resource)
+// imagine that you’re in an event loop now and the resource has changed
+store.sync(ctx); // synchronize all resources (e.g. my_resource)
 }
 ```
 
@@ -316,14 +318,14 @@ fn main() {
 Most of the interesting concept of `warmy` is to enable you to hot-reload resources without
 having to re-run your application. This is done via two items:
 
-  - [`Load::reload`], a method called whenever an object must be reloaded.
-  - [`Store::sync`], a method to synchronize a [`Store`].
+- [`Load::reload`], a method called whenever an object must be reloaded.
+- [`Store::sync`], a method to synchronize a [`Store`].
 
 The [`Load::reload`] function is very straight-forward: it’s called when the resource changes.
 This situation happens:
 
-  - Either when the resource is on the filesystem (the file changes).
-  - Or if it’s a dependent resource of one that has reloaded.
+- Either when the resource is on the filesystem (the file changes).
+- Or if it’s a dependent resource of one that has reloaded.
 
 See the documentation of [`Load::reload`] for further details.
 
@@ -340,7 +342,7 @@ to be restrained to your only types. A typical way to deal with that is by const
 type variable. The [`Inspect`] trait was introduced for this very purpose. For
 instance:
 
-```rust
+```
 use std::fmt;
 use std::io;
 use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
@@ -348,48 +350,48 @@ use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
 // Possible errors that might happen.
 #[derive(Debug)]
 enum Error {
-  CannotLoadFromFS,
-  CannotLoadFromLogical,
-  IOError(io::Error)
+CannotLoadFromFS,
+CannotLoadFromLogical,
+IOError(io::Error)
 }
 
 impl fmt::Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
-      Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
-      Error::IOError(ref e) => write!(f, "IO error: {}", e),
-    }
-  }
+fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+match *self {
+Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+Error::IOError(ref e) => write!(f, "IO error: {}", e),
+}
+}
 }
 
 struct Foo;
 
 struct Ctx {
-  nb_res_loaded: usize
+nb_res_loaded: usize
 }
 
 impl<C> Load<C, SimpleKey> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut Ctx> {
-  type Error = Error;
+type Error = Error;
 
-  fn load(
-    key: SimpleKey,
-    storage: &mut Storage<C, SimpleKey>,
-    ctx: &mut C
-  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
-    Self::inspect(ctx).nb_res_loaded += 1; // magic happens here!
+fn load(
+key: SimpleKey,
+storage: &mut Storage<C, SimpleKey>,
+ctx: &mut C
+) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+Self::inspect(ctx).nb_res_loaded += 1; // magic happens here!
 
-    Ok(Foo.into())
-  }
+Ok(Foo.into())
+}
 }
 
 fn main() {
-  use warmy::{Res, Store, StoreOpt};
+use warmy::{Res, Store, StoreOpt};
 
-  let mut store: Store<Ctx, SimpleKey> = Store::new(StoreOpt::default()).unwrap();
-  let mut ctx = Ctx { nb_res_loaded: 0 };
+let mut store: Store<Ctx, SimpleKey> = Store::new(StoreOpt::default()).unwrap();
+let mut ctx = Ctx { nb_res_loaded: 0 };
 
-  let r: Res<Foo> = store.get(&"test-0".into(), &mut ctx).unwrap();
+let r: Res<Foo> = store.get(&"test-0".into(), &mut ctx).unwrap();
 }
 ```
 
@@ -398,7 +400,7 @@ universal implementor of [`Inspect`] enables you to directly [`inspect`] the con
 if you wanted to inspect it more precisely, like with `&mut usize`, you would need to write an
 implementation of [`Inspect`] for your types:
 
-```rust
+```
 use std::fmt;
 use std::io;
 use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
@@ -406,48 +408,48 @@ use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
 // Possible errors that might happen.
 #[derive(Debug)]
 enum Error {
-  CannotLoadFromFS,
-  CannotLoadFromLogical,
-  IOError(io::Error)
+CannotLoadFromFS,
+CannotLoadFromLogical,
+IOError(io::Error)
 }
 
 impl fmt::Display for Error {
-  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    match *self {
-      Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
-      Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
-      Error::IOError(ref e) => write!(f, "IO error: {}", e),
-    }
-  }
+fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+match *self {
+Error::CannotLoadFromFS => f.write_str("cannot load from file system"),
+Error::CannotLoadFromLogical => f.write_str("cannot load from logical"),
+Error::IOError(ref e) => write!(f, "IO error: {}", e),
+}
+}
 }
 
 struct Foo;
 
 struct Ctx {
-  nb_res_loaded: usize
+nb_res_loaded: usize
 }
 
 // this implementor states how the inspection should occur for Foo when the context has type
 // Ctx: by targetting a mutable reference on a usize (i.e. the counter)
 impl<'a> Inspect<'a, Ctx, &'a mut usize> for Foo {
-  fn inspect(ctx: &mut Ctx) -> &mut usize {
-    &mut ctx.nb_res_loaded
-  }
+fn inspect(ctx: &mut Ctx) -> &mut usize {
+&mut ctx.nb_res_loaded
+}
 }
 
 // notice the usize instead of Ctx here
 impl<C> Load<C, SimpleKey> for Foo where Foo: for<'a> Inspect<'a, C, &'a mut usize> {
-  type Error = Error;
+type Error = Error;
 
-  fn load(
-    key: SimpleKey,
-    storage: &mut Storage<C, SimpleKey>,
-    ctx: &mut C
-  ) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
-    *Self::inspect(ctx) += 1; // direct access to the counter
+fn load(
+key: SimpleKey,
+storage: &mut Storage<C, SimpleKey>,
+ctx: &mut C
+) -> Result<Loaded<Self, SimpleKey>, Self::Error> {
+*Self::inspect(ctx) += 1; // direct access to the counter
 
-    Ok(Foo.into())
-  }
+Ok(Foo.into())
+}
 }
 ```
 
@@ -473,7 +475,7 @@ any type that implements [`serde::Deserialize`] can be loaded and hot-reloaded b
 with zero boilerplate from your side, just by asking `warmy` to get the given scarse resource.
 This is done with the [`Store::get_by`] or [`Store::get_proxied_by`] methods.
 
-```rust
+```
 use serde::Deserialize;
 use warmy::{Res, SimpleKey, Store, StoreOpt};
 use warmy::json::Json;
@@ -483,44 +485,44 @@ use std::time::Duration;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 struct Dog {
-  name: String,
-  gender: Gender
+name: String,
+gender: Gender
 }
 
 impl Default for Dog {
-  fn default() -> Self {
-    Dog {
-      name: "Norbert".to_owned(),
-      gender: Gender::Male
-    }
-  }
+fn default() -> Self {
+Dog {
+name: "Norbert".to_owned(),
+gender: Gender::Male
+}
+}
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum Gender {
-  Female,
-  Male
+Female,
+Male
 }
 
 fn main() {
-  let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).unwrap();
-  let ctx = &mut ();
+let mut store: Store<(), SimpleKey> = Store::new(StoreOpt::default()).unwrap();
+let ctx = &mut ();
 
-  let resource: Result<Res<Dog>, _> = store.get_by(&SimpleKey::from_path("/dog.json"), ctx, Json);
+let resource: Result<Res<Dog>, _> = store.get_by(&SimpleKey::from_path("/dog.json"), ctx, Json);
 
-  match resource {
-    Ok(dog) => {
-      loop {
-        store.sync(ctx);
+match resource {
+Ok(dog) => {
+loop {
+store.sync(ctx);
 
-        println!("Dog is {} and is a {:?}", dog.borrow().name, dog.borrow().gender);
-        sleep(Duration::from_millis(1000));
-      }
-    }
+println!("Dog is {} and is a {:?}", dog.borrow().name, dog.borrow().gender);
+sleep(Duration::from_millis(1000));
+}
+}
 
-    Err(e) => eprintln!("{}", e)
-  }
+Err(e) => eprintln!("{}", e)
+}
 }
 ```
 
@@ -564,3 +566,5 @@ further details on how to use the resource discovery mechanism.
 [`Inspect`]: context/trait.Inspect.html
 [`inspect`]: context/trait.Inspect.html#tymethod.inspect
 [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
+
+<!-- cargo-sync-readme end -->

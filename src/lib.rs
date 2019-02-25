@@ -1,6 +1,5 @@
 //! Hot-reloading, loadable and reloadable resources.
 //!
-//!
 //! * [Foreword](#foreword)
 //! * [Loading a resource](#loading-a-resource)
 //!   * [Store](#store)
@@ -15,6 +14,7 @@
 //! * [Load methods](#load-methods)
 //!   * [Universal JSON support](#universal-json-support)
 //! * [Resource discovery](#resource-discovery)
+//!
 //! # Foreword
 //!
 //! Resources are objects that live in a store and can be hot-reloaded – i.e. they can change
