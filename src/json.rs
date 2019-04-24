@@ -14,15 +14,15 @@ use std::path::PathBuf;
 use crate::key::Key;
 use crate::load::{Load, Loaded, Storage};
 
-/// The JSON universal method. Use this with `Store::get_by` or `Store::get_proxied_by` to benefit
-/// from the automatic implementors.
+/// The JSON universal method. Use this with [`Storage::get_by`] or [`Storage::get_proxied_by`] to
+/// benefit from the automatic implementors.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Json;
 
 /// Possible error that might occur while loading and reloading JSON formatted scarce resources.
 #[derive(Debug)]
 pub enum JsonError {
-  /// An error in `serde_json`.
+  /// An error in [serde_json](https://crates.io/crates/serde-json).
   JsonError(serde_json::Error),
   /// The file specified by the key failed to open.
   CannotOpenFile(PathBuf, io::Error),

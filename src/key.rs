@@ -1,4 +1,4 @@
-//! Module exporting all key types recognized by `warmy`.
+//! Module exporting all key types recognized by this crate.
 
 use any_cache::CacheKey;
 use std::hash::{Hash, Hasher};
@@ -8,12 +8,15 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::res::Res;
 
-/// Class of keys recognized by `warmy`.
+/// Class of recognized keys.
 pub trait Key: 'static + Clone + Eq + Hash {
   /// Prepare a key.
   ///
   /// If your key is akin to a file system key, it’s very likely you need to substitute its VFS path
-  /// with the `root` argument. It’s advised to use the `prepare_key` method for your inner key value.
+  /// with the `root` argument. It’s advised to use the [`prepare_key`] method for your inner key
+  /// value.
+  ///
+  /// [`prepare_key`]: crate::key::Key::prepare_key
   fn prepare_key(self, root: &Path) -> Self;
 }
 

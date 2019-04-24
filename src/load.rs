@@ -29,6 +29,8 @@ use crate::res::Res;
 ///
 /// The last type variable, `Method`, is a tag-only value that is useful to implement several
 /// algorithms to load the same type with different methods.
+///
+/// [`SimpleKey`]: crate::key::SimpleKey
 pub trait Load<C, K, Method = ()>: 'static + Sized
 where K: Key,
       Method: ?Sized {
@@ -37,10 +39,10 @@ where K: Key,
 
   /// Load a resource.
   ///
-  /// The `Storage` can be used to load additional resource dependencies.
+  /// The [`Storage`] can be used to load additional resource dependencies.
   ///
   /// The result type is used to register for dependency events. If you do not need any, you can
-  /// lift your return value in `Loaded<_>` with `your_value.into()`.
+  /// lift your return value in [`Loaded`] with `your_value.into()`.
   fn load(
     key: K,
     storage: &mut Storage<C, K>,
@@ -50,7 +52,7 @@ where K: Key,
   // FIXME: add support for redeclaring the dependencies?
   /// Function called when a resource must be reloaded.
   ///
-  /// The default implementation of that function calls `load` and returns its result.
+  /// The default implementation of that function calls [`Load::load`] and returns its result.
   fn reload(
     &self,
     key: K,
@@ -65,8 +67,8 @@ where K: Key,
 ///
 /// This type enables you to register a resource for reloading events of other resources. Those are
 /// named dependencies. If you don’t need to run specific code on a dependency reloading, use
-/// the `.into()` function to lift your return value to `Loaded<_>` or use the provided
-/// `without_dep` function.
+/// the `.into()` function to lift your return value to [`Loaded`] or use the provided
+/// [`Loaded::without_dep`] function.
 pub struct Loaded<T, K> {
   /// The loaded object.
   pub res: T,
@@ -135,7 +137,7 @@ impl<C, K> Storage<C, K> where K: Key {
     }
   }
 
-  /// The canonicalized root the `Storage` is configured with.
+  /// The canonicalized root the [`Storage`] is configured with.
   pub fn root(&self) -> &Path {
     &self.canon_root
   }
@@ -143,7 +145,7 @@ impl<C, K> Storage<C, K> where K: Key {
   /// Inject a new resource in the store.
   ///
   /// The resource might be refused for several reasons. Further information in the documentation of
-  /// the `StoreError` error type.
+  /// the [`StoreError`] error type.
   fn inject<T, M>(
     &mut self,
     key: K,
@@ -196,7 +198,7 @@ impl<C, K> Storage<C, K> where K: Key {
     Ok(res)
   }
 
-  /// Get a resource from the `Storage` and return an error if its loading failed.
+  /// Get a resource from the [`Storage`] and return an error if its loading failed.
   ///
   /// This function uses the default loading method.
   pub fn get<T>(&mut self, key: &K, ctx: &mut C) -> Result<Res<T>, StoreErrorOr<T, C, K>>
@@ -204,7 +206,7 @@ impl<C, K> Storage<C, K> where K: Key {
     self.get_by(key, ctx, ())
   }
 
-  /// Get a resource from the `Storage` by using a specific method and return and error if its
+  /// Get a resource from the [`Storage`] by using a specific method and return and error if its
   /// loading failed.
   pub fn get_by<T, M>(
     &mut self,
@@ -232,7 +234,7 @@ impl<C, K> Storage<C, K> where K: Key {
     }
   }
 
-  /// Get a resource from the `Storage` for the given key. If it fails, a proxied version is used,
+  /// Get a resource from the [`Storage`] for the given key. If it fails, a proxied version is used,
   /// which will get replaced by the resource once it’s available and reloaded.
   ///
   /// This function uses the default loading method.
@@ -249,7 +251,7 @@ impl<C, K> Storage<C, K> where K: Key {
       .or_else(|_| self.inject::<T, ()>(key.clone().into(), proxy(), Vec::new()))
   }
 
-  /// Get a resource from the `Storage` for the given key by using a specific method. If it fails, a
+  /// Get a resource from the [`Storage`] for the given key by using a specific method. If it fails, a
   /// proxied version is used, which will get replaced by the resource once it’s available and
   /// reloaded.
   pub fn get_proxied_by<T, M, P>(
@@ -272,9 +274,9 @@ impl<C, K> Storage<C, K> where K: Key {
 pub enum StoreError<K> {
   /// The root path for a filesystem resource was not found.
   RootDoesNotExist(PathBuf),
-  /// The key associated with a resource already exists in the `Store`.
+  /// The key associated with a resource already exists in the [`Store`].
   ///
-  /// > Note: it is not currently possible to have two resources living in a `Store` and using an
+  /// > Note: it is not currently possible to have two resources living in a [`Store`] and using an
   /// > identical key at the same time.
   AlreadyRegisteredKey(K),
 }
@@ -427,7 +429,7 @@ impl<C, K> Synchronizer<C, K> where K: Key {
     });
   }
 
-  /// Synchronize the `Storage` by updating the resources that ought to.
+  /// Synchronize the [`Storage`] by updating the resources that ought to.
   fn sync(&mut self, storage: &mut Storage<C, K>, ctx: &mut C) where K: for<'a> From<&'a Path> {
     self.dequeue_fs_events(storage, ctx);
     self.reload_dirties(storage, ctx);
@@ -445,7 +447,7 @@ impl<C, K> Store<C, K> where K: Key {
   ///
   /// # Failures
   ///
-  /// This function will fail if the root path in the `StoreOpt` doesn’t resolve to a correct
+  /// This function will fail if the root path in the [`StoreOpt`] doesn’t resolve to a correct
   /// canonicalized path.
   pub fn new(opt: StoreOpt<C, K>) -> Result<Self, StoreError<K>> {
     // canonicalize the root because some platforms won’t correctly report file changes otherwise
@@ -475,7 +477,7 @@ impl<C, K> Store<C, K> where K: Key {
     Ok(store)
   }
 
-  /// Synchronize the `Store` by updating the resources that ought to with a provided context.
+  /// Synchronize the [`Store`] by updating the resources that ought to with a provided context.
   pub fn sync(&mut self, ctx: &mut C) where K: for<'a> From<&'a Path> {
     self.synchronizer.sync(&mut self.storage, ctx);
   }
@@ -495,7 +497,7 @@ impl<C, K> DerefMut for Store<C, K> {
   }
 }
 
-/// Various options to customize a `Store`.
+/// Various options to customize a [`Store`].
 ///
 /// Feel free to inspect all of its declared methods for further information.
 pub struct StoreOpt<C, K> {
@@ -518,7 +520,7 @@ impl<C, K> StoreOpt<C, K> {
   /// Change the debounce duration used to determine whether a resource should be
   /// reloaded or not.
   ///
-  /// A `Store` will wait that amount of time before deciding an resource should be reloaded after
+  /// A [`Store`] will wait that amount of time before deciding an resource should be reloaded after
   /// it has changed on the filesystem. That is required in order to cope with write streaming, that
   /// generates a lot of write event.
   ///
@@ -539,7 +541,7 @@ impl<C, K> StoreOpt<C, K> {
     self.debounce_duration
   }
 
-  /// Change the root directory from which the `Store` will be watching file changes.
+  /// Change the root directory from which the [`Store`] will be watching file changes.
   ///
   /// # Default
   ///
@@ -593,11 +595,13 @@ impl<C, K> Discovery<C, K> {
   /// Create an new filter.
   ///
   /// The closure is passed the path of the discovered resource along with the storage and the
-  /// context so that you can `get` that resource if you want. Keep in mind that the path is a raw
+  /// context so that you can [`get`] that resource if you want. Keep in mind that the path is a raw
   /// and absolute path: you’ll have to extract the key (according to the type of resource you
   /// target) and pattern-match the extension / mime type on your own to choose which type of
   /// resource you want to get. Or you’ll just go full one-way and use the same resource type for
   /// all discovery, that’s also possible.
+  ///
+  /// [`get`]: crate::load::Storage::get
   pub fn new<F>(f: F) -> Self where F: 'static + FnMut(&Path, &mut Storage<C, K>, &mut C) {
     Discovery {
       closure: Box::new(f)

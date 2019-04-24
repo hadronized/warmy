@@ -2,7 +2,7 @@
 
 /// The inspect context trait.
 ///
-/// This trait is very similar to the `BorrowMut` trait but is specific to the need of this crate
+/// This trait is very similar to the [`BorrowMut`] trait but is specific to the need of this crate
 /// and how resources inspect contexts. In order to get why such a trait is needed, you must be
 /// introduced to the semantics borrowing problem.
 ///
@@ -89,6 +89,8 @@
 /// possible to encode mutable references with `&'a mut _` but you can also returns any kind of
 /// type, even with a lifetime outliving the borrow. This enables returning `()` or other exotic
 /// kind of data (for instance, you might want to copy / clone something and not use any reference).
+///
+/// [`BorrowMut`]: std::borrow::BorrowMut
 pub trait Inspect<'a, Ctx, Inspected, Method = ()> {
   /// Inspect the context.
   fn inspect(ctx: &'a mut Ctx) -> Inspected;
