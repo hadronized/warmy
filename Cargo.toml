@@ -1,6 +1,6 @@
 [package]
 name = "warmy"
-version = "0.11.1"
+version = "0.11.2"
 license = "BSD-3-Clause"
 authors = ["Dimitri Sabadie <dimitri.sabadie@gmail.com>"]
 description = "Hot-reloading loadable and reloadable resources"
@@ -22,6 +22,7 @@ maintenance = { status = "actively-developed" }
 [features]
 default = ["json"]
 json = ["serde", "serde_json"]
+arc = []
 
 [dependencies]
 any-cache = "0.2"

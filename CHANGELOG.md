@@ -1,3 +1,11 @@
+## 0.11.2
+
+> Wed Apr 24th 2019
+
+  - Add the `"arc"` feature gate, allowing to replace the internal representation of resources by
+    `Arc`-ed objects in order to help sending resources accross threads. This is a temporary patch
+    until a better solution shows up.
+
 ## 0.11.1
 
 > Thu Jan 24th 2019
