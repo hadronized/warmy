@@ -1,6 +1,7 @@
 //! Hot-reloading, loadable and reloadable resources.
 //!
 //! * [Foreword](#foreword)
+//!   * [Feature-gates](#feature-gates)
 //! * [Loading a resource](#loading-a-resource)
 //!   * [Store](#store)
 //!   * [The `Key` type variable](#the-key-type-variable)
@@ -30,6 +31,17 @@
 //!
 //! This small introduction will give you enough information and examples to get your feet wet with
 //! `warmy`. If you want to know more, feel free to visit the documentation of submodules.
+//!
+//! ## Feature-gates
+//!
+//! Here’s an exhaustive list of feature-gates available:
+//!
+//!   - `"json"`: provides a [`Json`] type that you can use as loading method to automatically load
+//!     any type that implements [`serde::Deserialize`]. You don’t even have to implement [`Load`]
+//!     by your own! **Enabled by default**
+//!   - `"arc"`: changes the internal representation of resources in order to use [`Arc`] and
+//!     [`Mutex`], allowing for cross-thread sharing of resources. This is a current patch in the
+//!     waiting of a better asynchronous solution.
 //!
 //! # Loading a resource
 //!
@@ -534,28 +546,30 @@
 //! [serde-json]: https://crates.io/crates/serde_json
 //! [serde_json::Error]: https://docs.serde.rs/serde_json/struct.Error.html
 //! [VFS]: https://en.wikipedia.org/wiki/Virtual_file_system
-//! [`Key`]: load/trait.Key.html
-//! [`Load`]: load/trait.Load.html
-//! [`Load::Error`]: load/trait.Load.html#associatedtype.Error
-//! [`Load::load`]: load/trait.Load.html#tymethod.load
-//! [`Load::reload`]: load/trait.Load.html#tymethod.reload
-//! [`Loaded`]: load/struct.Loaded.html
-//! [`Loaded::with_deps`]: load/struct.Loaded.html#method.with_deps
-//! [`Json`]: json/struct.Json.html
-//! [`Storage`]: load/struct.Storage.html
-//! [`Store`]: load/struct.Store.html
-//! [`Store::get`]: load/struct.Store.html#method.get
-//! [`Store::get_by`]: load/struct.Store.html#method.get_by
-//! [`Store::get_proxied`]: load/struct.Store.html#method.get_proxied
-//! [`Store::get_proxied_by`]: load/struct.Store.html#method.get_proxied_by
-//! [`Store::sync`]: load/struct.Store.html#method.sync
-//! [`StoreOpt`]: load/struct.StoreOpt.html
-//! [`StoreOpt::set_discovery`]: load/struct.StoreOpt.html#method.set_discovery
-//! [`StoreOpt::discovery`]: load/struct.StoreOpt.html#method.discovery
-//! [`SimpleKey`]: key/enum.SimpleKey.html
-//! [`Inspect`]: context/trait.Inspect.html
-//! [`inspect`]: context/trait.Inspect.html#tymethod.inspect
+//! [`Key`]: crate::load::Key
+//! [`Load`]: crate::load::Load
+//! [`Load::Error`]: crate::load::Load::Error
+//! [`Load::load`]: crate::load::Load::load
+//! [`Load::reload`]: crate::load::Load::reload
+//! [`Loaded`]: crate::load::Loaded
+//! [`Loaded::with_deps`]: crate::load::Loaded::with_deps
+//! [`Json`]: crate::json::Json
+//! [`Storage`]: crate::load::Storage
+//! [`Store`]: crate::load::Store
+//! [`Store::get`]: crate::load::Storage::get
+//! [`Store::get_by`]: crate::load::Storage::get_by
+//! [`Store::get_proxied`]: crate::load::Storage::get_proxied
+//! [`Store::get_proxied_by`]: crate::load::Storage::get_proxied_by
+//! [`Store::sync`]: crate::load::Store::sync
+//! [`StoreOpt`]: crate::load::StoreOpt
+//! [`StoreOpt::set_discovery`]: crate::load::StoreOpt::set_discovery
+//! [`StoreOpt::discovery`]: crate::load::StoreOpt::discovery
+//! [`SimpleKey`]: crate::key::SimpleKey
+//! [`Inspect`]: crate::context::Inspect
+//! [`inspect`]: crate::context::Inspect::inspect
 //! [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
+//! [`Arc`]: std::sync::Arc
+//! [`Mutex`]: std::sync::Mutex
 
 pub mod context;
 #[cfg(feature = "json")] pub mod json;
