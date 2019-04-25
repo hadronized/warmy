@@ -1,3 +1,9 @@
+## 0.11.3
+
+> Thu Apr 25th 2019
+
+  - Update the README with [cargo-sync-readme](https://crates.io/crates/cargo-sync-readme).
+
 ## 0.11.2
 
 > Wed Apr 24th 2019
