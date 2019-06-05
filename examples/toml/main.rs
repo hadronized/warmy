@@ -1,4 +1,4 @@
-// this example can be run with 'cargo run --example toml --features toml'
+// this example can be run with 'cargo run --example toml --features toml_impl'
 use serde::Deserialize;
 use std::thread::sleep;
 use std::time::Duration;
