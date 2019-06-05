@@ -24,7 +24,7 @@ pub struct Toml;
 pub enum TomlError {
   /// An error in [toml](https://crates.io/crates/toml).
   TomlError(toml::de::Error),
-  /// The file specified by the key failed to open.
+  /// The file specified by the key failed to open or could not be read.
   CannotReadFile(PathBuf, io::Error),
   /// The input key doesn’t provide enough information to open a file.
   NoKey,
