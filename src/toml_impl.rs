@@ -7,13 +7,11 @@
 use serde::Deserialize;
 use std::io;
 use std::fmt;
-use std::fs::File;
 use std::path::PathBuf;
 
 use crate::key::Key;
 use crate::load::{Load, Loaded, Storage};
 use toml::{self,from_str};
-use std::io::Read;
 use std::fs::read_to_string;
 
 /// The Toml universal method. Use this with [`Storage::get_by`] or [`Storage::get_proxied_by`] to
@@ -57,7 +55,7 @@ where K: Key + Into<Option<PathBuf>>,
     _: &mut C
   ) -> Result<Loaded<Self, K>, Self::Error> {
     if let Some(path) = key.into() {
-      let file_content = read_to_string(path)
+      let file_content = read_to_string(&path)
           .map_err(|ioerr| TomlError::CannotReadFile(path, ioerr))?;
 
       from_str(&file_content)

@@ -1,0 +1,2 @@
+# Try changing the message while the example program is running. Don't forget to save.
+msg = "Hello World"
