@@ -1,16 +1,16 @@
-extern crate tempdir;
+extern crate tempfile;
 extern crate warmy;
 
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
-use tempdir::TempDir;
+use tempfile::Builder;
 use warmy::{Inspect, Load, Loaded, Res, SimpleKey, Storage, Store};
 
 fn with_tmp_dir<F, B>(f: F)
 where F: Fn(&Path) -> B {
-  let tmp_dir = TempDir::new("warmy").expect("create temporary directory");
+  let tmp_dir = Builder::new().prefix("warmy").tempdir().expect("create temporary directory");
   let _ = f(tmp_dir.path());
   tmp_dir.close().expect("close the temporary directory");
 }

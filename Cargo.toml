@@ -31,4 +31,4 @@ serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
-tempdir = "0.3"
+tempfile = "3"
