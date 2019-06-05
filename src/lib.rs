@@ -573,6 +573,7 @@
 
 pub mod context;
 #[cfg(feature = "json")] pub mod json;
+#[cfg(feature = "toml")] pub mod toml_impl;
 pub mod key;
 pub mod load;
 pub mod res;
