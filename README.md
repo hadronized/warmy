@@ -10,22 +10,6 @@
 
 Hot-reloading, loadable and reloadable resources.
 
-* [Foreword](#foreword)
-  * [Feature-gates](#feature-gates)
-* [Loading a resource](#loading-a-resource)
-  * [Store](#store)
-  * [The `Key` type variable](#the-key-type-variable)
-    * [Special case: simple keys](#special-case-simple-keys)
-  * [The `Load::Error` associated type](#the-loaderror-associated-type)
-  * [The `Load::load` method](#the-loadload-method)
-  * [Express your dependencies with Loaded](#express-your-dependencies-with-loaded)
-  * [Let’s get some things!](#let’s-get-some-things)
-* [Reloading a resource](#reloading-a-resource)
-* [Context inspection](#context-inspection)
-* [Load methods](#load-methods)
-  * [Universal JSON support](#universal-json-support)
-* [Resource discovery](#resource-discovery)
-
 # Foreword
 
 Resources are objects that live in a store and can be hot-reloaded – i.e. they can change
@@ -75,7 +59,7 @@ A [`Store`] is responsible for holding and caching resources. Each [`Store`] is 
 [`Store`] by giving it a [`StoreOpt`], which is used to customize the [`Store`] – if you don’t
 need it nor care about it for the moment, just use `Store::default`.
 
-```
+```rust
 use warmy::{SimpleKey, Store, StoreOpt};
 
 let res = Store::<(), SimpleKey>::new(StoreOpt::default());
@@ -129,7 +113,7 @@ This is the entry-point method. [`Load::load`] must be implemented in order for 
 how to read the resource. Let’s implement it for two types: one that represents a resource on
 the filesystem, one computed from memory.
 
-```
+```rust
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
@@ -260,7 +244,7 @@ several functions to achieve that goal:
 
 Let’s focus on [`Store::get`] for this tutorial.
 
-```
+```rust
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read};
@@ -354,7 +338,7 @@ to be restrained to your only types. A typical way to deal with that is by const
 type variable. The [`Inspect`] trait was introduced for this very purpose. For
 instance:
 
-```
+```rust
 use std::fmt;
 use std::io;
 use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
@@ -412,7 +396,7 @@ universal implementor of [`Inspect`] enables you to directly [`inspect`] the con
 if you wanted to inspect it more precisely, like with `&mut usize`, you would need to write an
 implementation of [`Inspect`] for your types:
 
-```
+```rust
 use std::fmt;
 use std::io;
 use warmy::{Inspect, Load, Loaded, SimpleKey, Store, StoreOpt, Storage};
@@ -487,7 +471,7 @@ any type that implements [`serde::Deserialize`] can be loaded and hot-reloaded b
 with zero boilerplate from your side, just by asking `warmy` to get the given scarse resource.
 This is done with the [`Store::get_by`] or [`Store::get_proxied_by`] methods.
 
-```
+```rust
 use serde::Deserialize;
 use warmy::{Res, SimpleKey, Store, StoreOpt};
 use warmy::json::Json;
@@ -538,6 +522,15 @@ fn main() {
 }
 ```
 
+## Universal TOML support
+
+The crate also supports *universal TOML implementation*. That implementation is available via
+the [`Toml`] type.
+
+> Universal TOML support is feature-gated with `"toml-impl"`.
+
+The working mechanism is the same as with [universal JSON support](#universal-json-support).
+
 # Resource discovery
 
 Resource discovery is available via a simple mechanism: every time a new resource is available
@@ -564,6 +557,7 @@ further details on how to use the resource discovery mechanism.
 [`Loaded`]: crate::load::Loaded
 [`Loaded::with_deps`]: crate::load::Loaded::with_deps
 [`Json`]: crate::json::Json
+[`Toml`]: crate::toml::Toml
 [`Storage`]: crate::load::Storage
 [`Store`]: crate::load::Store
 [`Store::get`]: crate::load::Storage::get
