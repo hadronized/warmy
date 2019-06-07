@@ -22,7 +22,7 @@ maintenance = { status = "actively-developed" }
 [features]
 default = ["json"]
 json = ["serde", "serde_json"]
-toml_impl = ["serde", "toml"]
+toml-impl = ["serde", "toml"]
 arc = []
 
 [dependencies]
@@ -34,3 +34,7 @@ toml = { version = "0.5.1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+[[example]]
+name = "toml"
+required-features = ["toml-impl"]
