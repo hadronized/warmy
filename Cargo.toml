@@ -21,9 +21,9 @@ maintenance = { status = "actively-developed" }
 
 [features]
 default = ["json"]
+arc = []
 json = ["serde", "serde_json"]
 toml-impl = ["serde", "toml"]
-arc = []
 
 [dependencies]
 any-cache = "0.2"

@@ -45,10 +45,8 @@ impl fmt::Display for TomlError {
 }
 
 impl<C, K, T> Load<C, K, Toml> for T
-where
-  K: Key + Into<Option<PathBuf>>,
-  T: 'static + for<'de> Deserialize<'de>,
-{
+where K: Key + Into<Option<PathBuf>>,
+      T: 'static + for<'de> Deserialize<'de>, {
   type Error = TomlError;
 
   fn load(key: K, _: &mut Storage<C, K>, _: &mut C) -> Result<Loaded<Self, K>, Self::Error> {
