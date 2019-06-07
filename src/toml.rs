@@ -1,4 +1,4 @@
-//! toml universal implementors.
+//! TOML universal implementors.
 //!
 //! This module provides you with universal implementation for any type that implements [`serde::Deserialize`].
 //!
@@ -14,7 +14,7 @@ use crate::load::{Load, Loaded, Storage};
 use std::fs::read_to_string;
 use toml::{self, from_str};
 
-/// The Toml universal method. Use this with [`Storage::get_by`] or [`Storage::get_proxied_by`] to
+/// The TOML universal method. Use this with [`Storage::get_by`] or [`Storage::get_proxied_by`] to
 /// benefit from the automatic implementors.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Toml;
@@ -22,7 +22,7 @@ pub struct Toml;
 /// Possible error that might occur while loading and reloading TOML formatted scarce resources.
 #[derive(Debug)]
 pub enum TomlError {
-  /// An error in [toml](https://crates.io/crates/toml).
+  /// An error in [TOML](https://crates.io/crates/toml).
   TomlError(toml::de::Error),
   /// The file specified by the key failed to open or could not be read.
   CannotReadFile(PathBuf, io::Error),
