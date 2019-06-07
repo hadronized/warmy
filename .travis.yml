@@ -14,3 +14,6 @@ script:
   - cargo --version
   - cargo build --verbose
   - cargo test --verbose
+  - cargo install cargo-sync-readme
+  - cargo sync-readme -c
+  - if [ "$TRAVIS_OS_NAME" == "windows" ]; then cargo sync-readme -c -f bin --crlf; else cargo sync-readme -c -f bin; fi
