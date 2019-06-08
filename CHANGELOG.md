@@ -1,3 +1,12 @@
+# 0.12
+
+> Sat Jun 8th 2019
+
+  - Switch from [tempdir](https://crates.io/crates/tempdir) to
+    [tempfile](https://crates.io/crates/tempdir) in `dev-dependencies`.
+  - Add the universal implementation for the [toml](https://crates.io/crates/toml) crate. It is
+    accessible via the `Toml` type.
+
 ## 0.11.3
 
 > Thu Apr 25th 2019
