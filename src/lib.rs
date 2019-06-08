@@ -20,12 +20,14 @@
 //!
 //! Here’s an exhaustive list of feature-gates available:
 //!
-//!   - `"json"`: provides a [`Json`] type that you can use as loading method to automatically load
-//!     any type that implements [`serde::Deserialize`]. You don’t even have to implement [`Load`]
-//!     by your own! **Enabled by default**
 //!   - `"arc"`: changes the internal representation of resources in order to use [`Arc`] and
 //!     [`Mutex`], allowing for cross-thread sharing of resources. This is a current patch in the
 //!     waiting of a better asynchronous solution.
+//!   - `"json"`: provides a [`Json`] type that you can use as loading method to automatically load
+//!     any type that implements [`serde::Deserialize`] and encoded as [JSON]. You don’t even have
+//!     to implement [`Load`] by your own! **Enabled by default**
+//!   - `"toml-impl"`: provides a [`Toml`] type that you can use as loading method to automatically
+//!     load any type that implements [`serde::Deserialize`] and encoded as [TOML].
 //!
 //! # Loading a resource
 //!
@@ -564,6 +566,8 @@
 //! [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
 //! [`Arc`]: std::sync::Arc
 //! [`Mutex`]: std::sync::Mutex
+//! [JSON]: https://www.json.org
+//! [TOML]: https://github.com/toml-lang/toml
 
 pub mod context;
 #[cfg(feature = "json")] pub mod json;
