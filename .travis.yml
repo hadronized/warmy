@@ -15,5 +15,7 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - cargo install cargo-sync-readme
+  - cargo install cargo-outdated
   - cargo sync-readme -c
   - if [ "$TRAVIS_OS_NAME" == "windows" ]; then cargo sync-readme -c -f bin --crlf; else cargo sync-readme -c -f bin; fi
+  - cargo outdated -R --exit-code 1
