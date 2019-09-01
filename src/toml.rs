@@ -1,18 +1,20 @@
 //! TOML universal implementors.
 //!
-//! This module provides you with universal implementation for any type that implements [`serde::Deserialize`].
+//! This module provides you with universal implementation for any type that implements
+//! [`serde::Deserialize`] for encoded objects with [toml].
 //!
 //! [`serde::Deserialize`]: https://docs.rs/serde/1.0.85/serde/trait.Deserialize.html
+//! [toml]: https://crates.io/crates/toml
 
 use serde::Deserialize;
 use std::fmt;
+use std::fs::read_to_string;
 use std::io;
 use std::path::PathBuf;
+use toml::{self, from_str};
 
 use crate::key::Key;
 use crate::load::{Load, Loaded, Storage};
-use std::fs::read_to_string;
-use toml::{self, from_str};
 
 /// The TOML universal method. Use this with [`Storage::get_by`] or [`Storage::get_proxied_by`] to
 /// benefit from the automatic implementors.
