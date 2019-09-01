@@ -100,12 +100,12 @@ impl<T, K> From<T> for Loaded<T, K> {
 /// Metadata about a resource.
 struct ResMetaData<C, K> {
   /// Function to call each time the resource must be reloaded.
-  on_reload: Box<Fn(&mut Storage<C, K>, &mut C) -> Result<(), Box<Display>>>,
+  on_reload: Box<dyn Fn(&mut Storage<C, K>, &mut C) -> Result<(), Box<dyn Display>>>,
 }
 
 impl<C, K> ResMetaData<C, K> {
   fn new<F>(f: F) -> Self
-  where F: 'static + Fn(&mut Storage<C, K>, &mut C) -> Result<(), Box<Display>> {
+  where F: 'static + Fn(&mut Storage<C, K>, &mut C) -> Result<(), Box<dyn Display>> {
     ResMetaData {
       on_reload: Box::new(f),
     }
@@ -588,7 +588,7 @@ impl<C, K> StoreOpt<C, K> {
 ///
 /// If you don’t care about discovering new resources, feel free to use the [`Default`] implementation.
 pub struct Discovery<C, K> {
-  closure: Box<FnMut(&Path, &mut Storage<C, K>, &mut C)>,
+  closure: Box<dyn FnMut(&Path, &mut Storage<C, K>, &mut C)>,
 }
 
 impl<C, K> Discovery<C, K> {
