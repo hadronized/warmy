@@ -36,6 +36,8 @@ Here’s an exhaustive list of feature-gates available:
   - `"json"`: provides a [`Json`] type that you can use as loading method to automatically load
     any type that implements [`serde::Deserialize`] and encoded as [JSON]. You don’t even have
     to implement [`Load`] by your own! **Enabled by default**
+  - `"ron-impl"`: provides a [`Ron`] type that you can use as loading method to automatically
+    load any type that implemetns [`serde::Deserialize`] and encoded as [RON].
   - `"toml-impl"`: provides a [`Toml`] type that you can use as loading method to automatically
     load any type that implements [`serde::Deserialize`] and encoded as [TOML].
 
@@ -560,6 +562,7 @@ further details on how to use the resource discovery mechanism.
 [`Loaded::with_deps`]: crate::load::Loaded::with_deps
 [`Json`]: crate::json::Json
 [`Toml`]: crate::toml::Toml
+[`Ron`]: crate::ron::Ron
 [`Storage`]: crate::load::Storage
 [`Store`]: crate::load::Store
 [`Store::get`]: crate::load::Storage::get
@@ -578,5 +581,6 @@ further details on how to use the resource discovery mechanism.
 [`Mutex`]: std::sync::Mutex
 [JSON]: https://www.json.org
 [TOML]: https://github.com/toml-lang/toml
+[RON]: https://github.com/ron-rs/ron
 
 <!-- cargo-sync-readme end -->
