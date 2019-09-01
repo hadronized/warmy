@@ -1,0 +1,102 @@
+name: CI
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+
+  build-linux-json:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (JSON support)
+        run: cargo build --verbose --features json
+      - name: Test (JSON support)
+        run: cargo test --verbose --features json
+
+  build-linux-ron:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (RON support)
+        run: cargo build --verbose --features ron-impl
+      - name: Test (RON support)
+        run: cargo test --verbose --features ron-impl
+
+  build-linux-toml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (TOML support)
+        run: cargo build --verbose --features toml-impl
+      - name: Test (TOML support)
+        run: cargo test --verbose --features toml-impl
+
+  build-linux-arc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (Arc support)
+        run: cargo build --verbose --features arc
+      - name: Test (Arc support)
+        run: cargo test --verbose --features arc
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+
+  build-windows-json:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (JSON support)
+        run: cargo build --verbose --features json
+      - name: Test (JSON support)
+        run: cargo test --verbose --features json
+
+  build-windows-ron:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (RON support)
+        run: cargo build --verbose --features ron-impl
+      - name: Test (RON support)
+        run: cargo test --verbose --features ron-impl
+
+  build-windows-toml:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (TOML support)
+        run: cargo build --verbose --features toml-impl
+      - name: Test (TOML support)
+        run: cargo test --verbose --features toml-impl
+
+  build-windows-arc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build (Arc support)
+        run: cargo build --verbose --features arc
+      - name: Test (Arc support)
+        run: cargo test --verbose --features arc
+
+  check-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install cargo-sync-readme
+        run: cargo install --force cargo-sync-readme
+      - name: Check
+        run: cargo sync-readme -c
