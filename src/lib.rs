@@ -571,6 +571,7 @@
 
 pub mod context;
 #[cfg(feature = "json")] pub mod json;
+#[cfg(feature = "ron-impl")] pub mod ron;
 #[cfg(feature = "toml-impl")] pub mod toml;
 pub mod key;
 pub mod load;
