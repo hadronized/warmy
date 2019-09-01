@@ -1,3 +1,12 @@
+# 0.13
+
+> Sun Sep 1st 2019
+
+## Minor changes
+
+  - Add the universal implementation for the [ron](https://crates.io/crates/ron) crate. It is
+    accessible via the `Ron` type.
+
 # 0.12
 
 > Sat Jun 8th 2019
