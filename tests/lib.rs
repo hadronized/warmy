@@ -1,6 +1,3 @@
-extern crate tempfile;
-extern crate warmy;
-
 use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
